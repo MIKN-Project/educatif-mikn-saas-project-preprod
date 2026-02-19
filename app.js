@@ -6,10 +6,20 @@ const SUPABASE_URL = "https://itmvhjdblohqrgrbtaap.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0bXZoamRibG9ocXJncmJ0YWFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMTMzOTcsImV4cCI6MjA4Njg4OTM5N30.Sx5e6YQwWtTiNR29-9kKfOorMKquj5dcIJN4VO4JSao";
 
 const PLANS = {
-  free:   { maxClasses:2, maxStudents:30, maxActivites:10, quiz:true, salle:false },
-  pro:    { maxClasses:20, maxStudents:200, maxActivites:999, quiz:true, salle:true },
-  school: { maxClasses:999, maxStudents:999, maxActivites:999, quiz:true, salle:true }
+  free: {
+    maxClasses:2, maxStudents:20, maxEvals:10, maxActivites:5,
+    maxQuizQ:5, quiz:true, salle:false, parents:false
+  },
+  pro: {
+    maxClasses:15, maxStudents:200, maxEvals:999, maxActivites:999,
+    maxQuizQ:999, quiz:true, salle:true, parents:true
+  },
+  school: {
+    maxClasses:999, maxStudents:999, maxEvals:999, maxActivites:999,
+    maxQuizQ:999, quiz:true, salle:true, parents:true
+  }
 };
+
 let currentPlan="free", currentPlanData=PLANS.free;
 
 const $  = (s,r=document)=>r.querySelector(s);
@@ -103,19 +113,50 @@ function bindHeader(){
   $("#logoutBtn")?.addEventListener("click",async()=>{ await sb().auth.signOut(); location.href="index.html"; });
 }
 function checkFeature(feat,cb){ if(currentPlanData[feat]) cb(); else showUpgradeModal(feat); }
-function showUpgradeModal(feat){
-  const names={salle:"le Plan de salle interactif",quiz:"les Quiz QCM avancés"};
+function showUpgradeModal(feat, customMsg) {
   document.getElementById("modalUpgrade")?.remove();
-  const modal=document.createElement("div"); modal.className="modal show"; modal.id="modalUpgrade";
-  modal.innerHTML=`<div class="modal-content" style="max-width:420px;text-align:center;padding:30px">
-    <div style="font-size:52px">🔒</div>
-    <h2>Fonctionnalité Premium</h2>
-    <p style="color:var(--text-muted)"><strong>${names[feat]||feat}</strong> est disponible à partir du plan <strong>Pro</strong>.</p>
-    <button class="btn" onclick="document.getElementById('modalUpgrade').remove()" style="background:#f97316">Contacter pour upgrade →</button>
-    <button class="btn btn-secondary" onclick="document.getElementById('modalUpgrade').remove()" style="margin-left:8px">Fermer</button>
+  const msgs = {
+    salle:   "Le Plan de salle interactif est disponible à partir du plan Pro.",
+    parents: "L'espace parents est disponible à partir du plan Pro.",
+    quota:   customMsg || "Tu as atteint la limite de ton plan Free.",
+  };
+  const modal = document.createElement("div");
+  modal.className = "modal show"; modal.id = "modalUpgrade";
+  modal.innerHTML = `<div class="modal-content" style="max-width:420px;text-align:center;padding:28px">
+    <div style="font-size:48px;margin-bottom:8px">🔒</div>
+    <h2 style="margin-bottom:8px">Limite atteinte</h2>
+    <p style="color:var(--text-muted);font-size:14px;margin-bottom:20px">${msgs[feat]||msgs.quota}</p>
+    <div style="background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1.5px solid #fed7aa;border-radius:12px;padding:14px;margin-bottom:16px;font-size:13px;text-align:left;color:#9a3412">
+      <strong style="display:block;margin-bottom:8px">⭐ Plan Pro — ce que tu débloques :</strong>
+      ✅ Jusqu'à 15 classes<br>
+      ✅ Jusqu'à 200 élèves<br>
+      ✅ Évaluations & activités illimitées<br>
+      ✅ Quiz sans limite de questions<br>
+      ✅ Plan de salle interactif<br>
+      ✅ Espace parents
+    </div>
+    <button class="btn" onclick="document.getElementById('modalUpgrade').remove();showPlanModal();"
+      style="background:#f97316;width:100%;margin-bottom:8px">⭐ Voir les offres →</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('modalUpgrade').remove()"
+      style="width:100%">Fermer</button>
   </div>`;
   document.body.appendChild(modal);
 }
+window.showPlanModal = function() {
+  const icons = { free:"🆓", pro:"⭐", school:"🏫" };
+  const names = { free:"Plan Free", pro:"Plan Pro", school:"Plan School" };
+  const el = document.getElementById("planModalIcon");
+  const nl = document.getElementById("planModalName");
+  if (el) el.textContent = icons[currentPlan] || "🆓";
+  if (nl) nl.textContent = names[currentPlan] || "Plan Free";
+  // Encadre le plan actuel
+  ["free","pro","school"].forEach(p => {
+    const c = document.getElementById("card-"+p);
+    if(c) c.style.outline = p === currentPlan ? "3px solid #f97316" : "none";
+  });
+  document.getElementById("modalPlan")?.classList.add("show");
+};
+
 
 // ============================================
 // INDEX
@@ -123,10 +164,12 @@ function showUpgradeModal(feat){
 function initIndex(){
   applyTheme();
   const tabs=$$("[data-role]");
-  const setActive=r=>{ tabs.forEach(t=>t.classList.toggle("active",t.dataset.role===r)); localStorage.setItem("mcv_role",r); };
+  const setActive=r=>{ tabs.forEach(t=>{ t.classList.toggle("active",t.dataset.role===r); t.style.border=t.dataset.role===r?"2px solid var(--orange)":"2px solid var(--border)"; }); localStorage.setItem("mcv_role",r); };
   setActive(localStorage.getItem("mcv_role")||"teacher");
   tabs.forEach(t=>t.addEventListener("click",()=>setActive(t.dataset.role)));
   $("#themeBtn")?.addEventListener("click",toggleTheme);
+
+  // ── Connexion ──
   $("#loginBtn")?.addEventListener("click",async()=>{
     const email=($("#email").value||"").trim(), pass=$("#password").value||"";
     if(!email||!pass){toast("Requis","Email et mot de passe obligatoires.","error");return;}
@@ -135,7 +178,7 @@ function initIndex(){
       const {error}=await sb().auth.signInWithPassword({email,password:pass});
       if(error) throw error;
       const p=await sbProfile();
-      const home=roleHome(p?.role||localStorage.getItem("mcv_role")||"teacher");
+      const home=roleHome(p?.role);
       if(home){ location.href=home; }
       else { await sb().auth.signOut(); toast("Accès refusé","Ce compte n'a pas d'espace disponible.","error"); }
     }catch(e){toast("Erreur",e?.message||String(e),"error");}
@@ -148,23 +191,54 @@ function initIndex(){
     }catch(e){toast("Erreur",e?.message||String(e),"error");}
   });
 
-  // ✅ FIX 2 — auto-redirect sécurisé, déconnexion si rôle sans page
+  // ── Inscription ──
+  $("#registerBtn")?.addEventListener("click",async()=>{
+    const fullName=($("#regFullName").value||"").trim();
+    const email   =($("#regEmail").value||"").trim();
+    const pass    = $("#regPassword").value||"";
+    const pass2   = $("#regPasswordConfirm").value||"";
+    if(!fullName)          { toast("Requis","Ton nom complet est obligatoire.","error"); return; }
+    if(!email)             { toast("Requis","L'email est obligatoire.","error"); return; }
+    if(pass.length < 8)    { toast("Mot de passe","Minimum 8 caractères.","error"); return; }
+    if(pass !== pass2)     { toast("Erreur","Les mots de passe ne correspondent pas.","error"); return; }
+    if(!sbEnabled())       { toast("Config","Supabase non configuré.","error"); return; }
+    const btn=$("#registerBtn"); btn.disabled=true; btn.textContent="Création…";
+    try{
+      const {data,error}=await sb().auth.signUp({email,password:pass,options:{data:{full_name:fullName}}});
+      if(error) throw error;
+      // Créer le profil en base
+      if(data?.user){
+        await sb().from("profiles").upsert({
+          id:data.user.id, email, full_name:fullName,
+          role:"teacher", plan:"free", status:"active"
+        });
+      }
+      toast("✅ Compte créé","Bienvenue ! Connexion en cours…","success");
+      setTimeout(async()=>{
+        const p=await sbProfile().catch(()=>null);
+        const home=roleHome(p?.role||"teacher");
+        if(home) location.href=home;
+      },1200);
+    }catch(e){
+      toast("Erreur",e?.message||String(e),"error");
+    }finally{
+      btn.disabled=false; btn.textContent="Créer mon compte gratuit →";
+    }
+  });
+
+  // ── Auto-redirect si déjà connecté ──
   (async()=>{
     if(!sbEnabled()) return;
     const s=await sbSession();
     if(s){
       const p=await sbProfile().catch(()=>null);
       const home=roleHome(p?.role);
-      if(home){
-        location.href=home;
-      } else {
-        // Rôle sans interface (student, inconnu) → déconnexion propre
-        await sb().auth.signOut();
-        toast("Accès refusé","Ce compte n'a pas d'espace disponible.","error");
-      }
+      if(home){ location.href=home; }
+      else { await sb().auth.signOut(); }
     }
   })();
 }
+
 
 // ============================================
 // PROFESSEUR
@@ -210,7 +284,10 @@ async function loadDashboard(tid){
   await loadDashboardStats(tid);
   await loadRecentEvaluations(tid);
   renderDashboardShortcuts();
+  const banner=document.getElementById("freeBanner");
+  if(banner) banner.style.display=currentPlan==="free"?"flex":"none";
 }
+
 function renderDashboardShortcuts(){
   const c=$("#dashShortcuts"); if(!c) return;
   const sc=[
@@ -288,6 +365,7 @@ async function deleteClass(id){
 async function saveClass(tid){
   const id=$("#classId").value, name=$("#className").value.trim(), year=($("#classYear")?.value||"2025-2026").trim();
   if(!name){toast("Erreur","Nom requis","error");return;}
+  if(!id && !(await checkQuota("classes", tid))) return;   // ← ajouté ici, avant le try
   try{
     if(id){ await sb().from("classes").update({name,school_year:year}).eq("id",id); }
     else   { await sb().from("classes").insert({name,school_year:year,teacher_id:tid,tenant_id:tid}); }
@@ -295,6 +373,7 @@ async function saveClass(tid){
     await loadClasses(tid); await loadDashboardStats(tid);
   }catch(e){toast("Erreur",e.message,"error");}
 }
+
 
 // ---- ÉLÈVES ----
 async function loadEleves(tid){
@@ -332,11 +411,14 @@ async function deleteEleve(id){
 async function saveEleve(tid){
   const fn=$("#eleveFirstName").value.trim(), ln=$("#eleveLastName").value.trim(), cid=$("#eleveClassId").value;
   if(!fn||!ln){toast("Erreur","Prénom et nom requis","error");return;}
-  try{ await sb().from("students").insert({first_name:fn,last_name:ln,class_id:cid||null,teacher_id:tid,tenant_id:tid});
+  if(!(await checkQuota("students", tid))) return;         // ← ajouté ici, avant le try
+  try{
+    await sb().from("students").insert({first_name:fn,last_name:ln,class_id:cid||null,teacher_id:tid,tenant_id:tid});
     $("#modalEleve").classList.remove("show"); $("#eleveFirstName").value=""; $("#eleveLastName").value="";
     toast("Succès","Élève ajouté ✅","success"); await loadElevesList(tid); await loadDashboardStats(tid);
   }catch(e){toast("Erreur",e.message,"error");}
 }
+
 
 // ============================================
 // PLAN DE SALLE v7d — CANVAS LIBRE
@@ -817,6 +899,7 @@ async function saveEvaluation(tid){
   if(evalType==="quiz"&&quizData?.some(q=>!q.question.trim())){toast("Erreur","Tous les énoncés sont requis","error");return;}
   let assignedTo=null;
   if(evalCurrentAssignees==="custom") assignedTo=[...document.querySelectorAll(".assign-check:checked")].map(cb=>cb.value);
+  if(!id && !(await checkQuota("evals", tid))) return;
   try{
     const payload={title,subject,eval_date:date||new Date().toISOString().split("T")[0],class_id:classId,max_score:maxScore,teacher_id:tid,eval_type:evalType,expires_at:expiresAt||null,quiz_data:quizData,assigned_to:assignedTo};
     if(id){ await sb().from("evaluations").update(payload).eq("id",id); toast("Succès","Modifiée ✅","success"); }
@@ -907,12 +990,32 @@ async function saveActivite(tid){
   const classId=document.getElementById("activiteClassId")?.value||"";
   if(!title||!classId){toast("Erreur","Titre et classe requis","error");return;}
   const payload={title,description:desc,instructions:instr||null,activity_type:type,due_date:dueDate,class_id:classId,teacher_id:tid,status};
+  if(!id && !(await checkQuota("activites", tid))) return;
   try{
     if(id){ await sb().from("activities").update(payload).eq("id",id); toast("Succès","Modifiée ✅","success"); }
     else   { await sb().from("activities").insert(payload); toast("Succès","Créée ✅","success"); }
     $("#modalActivite").classList.remove("show"); await loadActivites(tid);
   }catch(e){toast("Erreur",e.message,"error");}
 }
+
+
+async function checkQuota(type, tid) {
+  const cfg = {
+    classes:  { table:"classes",     col:"teacher_id", max:currentPlanData.maxClasses,   label:"classes" },
+    students: { table:"students",    col:"teacher_id", max:currentPlanData.maxStudents,  label:"élèves" },
+    evals:    { table:"evaluations", col:"teacher_id", max:currentPlanData.maxEvals,     label:"évaluations" },
+    activites:{ table:"activities",  col:"teacher_id", max:currentPlanData.maxActivites, label:"activités" },
+  };
+  const c = cfg[type]; if (!c || c.max >= 999) return true;
+  const { count } = await sb().from(c.table).select("id",{count:"exact",head:true}).eq(c.col,tid);
+  if (count >= c.max) {
+    showUpgradeModal("quota", `Tu as atteint la limite de ${c.max} ${c.label} sur le plan Free. Passe au plan Pro pour continuer.`);
+    return false;
+  }
+  return true;
+}
+
+
 
 // ============================================
 // HELPERS + MODALS
