@@ -1010,10 +1010,11 @@ function renderUserList(data, showEdit) {
   const pl = { free:"🆓 Free", pro:"⭐ Pro", school:"🏫 School" };
   const hasPlanRole = r => r === "teacher" || r === "admin";
   const sb_map = {
-    active:    "<span style='color:#22c55e;font-weight:700'>✅ Actif</span>",
-    suspended: "<span style='color:#f59e0b;font-weight:700'>⏸ Suspendu</span>",
-    blocked:   "<span style='color:#ef4444;font-weight:700'>🚫 Bloqué</span>",
+    active:    "<span style='background:#dcfce7;color:#16a34a;font-weight:700;border-radius:999px;padding:3px 12px;font-size:12px'>✅ Actif</span>",
+    suspended: "<span style='background:#fef9c3;color:#ca8a04;font-weight:700;border-radius:999px;padding:3px 12px;font-size:12px'>⏸ Suspendu</span>",
+    blocked:   "<span style='background:#fee2e2;color:#dc2626;font-weight:700;border-radius:999px;padding:3px 12px;font-size:12px'>🚫 Bloqué</span>",
   };
+
   return data.map(u => `<div class="list-item">
     <div style="flex:1">
       <div style="font-weight:700">${u.full_name || "(Sans nom)"}</div>
@@ -1060,9 +1061,12 @@ async function adminLoadLicences() {
               <option value="school" ${u.plan==="school" ? "selected":""}>🏫 School</option>
             </select>
             <span class="badge-blue">${u.plan_status||"trial"}</span>
-            <span style="font-size:12px;font-weight:700;color:${u.status==="active"?"#22c55e":u.status==="suspended"?"#f59e0b":"#ef4444"}">
+            <span style="font-size:12px;font-weight:700;border-radius:999px;padding:3px 12px;
+              background:${u.status==="active"?"#dcfce7":u.status==="suspended"?"#fef9c3":"#fee2e2"};
+              color:${u.status==="active"?"#16a34a":u.status==="suspended"?"#ca8a04":"#dc2626"}">
               ${u.status==="active"?"✅ Actif":u.status==="suspended"?"⏸ Suspendu":"🚫 Bloqué"}
             </span>
+
           </div>
         </div>`).join("")
       : '<p class="panel-empty">Aucun professeur enregistré.</p>';
