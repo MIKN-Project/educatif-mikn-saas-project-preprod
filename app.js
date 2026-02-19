@@ -1,10 +1,9 @@
 // ============================================
-// Educatif MIKN — app.js v7d
-// Fix : noms élèves visibles + bureau prof + renommage table
+// Educatif MIKN — app.js v8
+// Fix : boucle infinie student + role création + suppression user
 // ============================================
 const SUPABASE_URL = "https://itmvhjdblohqrgrbtaap.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0bXZoamRibG9ocXJncmJ0YWFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMTMzOTcsImV4cCI6MjA4Njg4OTM5N30.Sx5e6YQwWtTiNR29-9kKfOorMKquj5dcIJN4VO4JSao";
-
 
 const PLANS = {
   free:   { maxClasses:2, maxStudents:30, maxActivites:10, quiz:true, salle:false },
@@ -31,7 +30,10 @@ function toggleTheme(){
   const v=(localStorage.getItem("mcv_theme")||"light")==="light"?"dark":"light";
   localStorage.setItem("mcv_theme",v); applyTheme();
 }
-function roleHome(r){ return {admin:"admin.html",teacher:"prof.html",parent:"parent.html"}[r]||"index.html"; }
+
+// ✅ FIX 1 — null au lieu de "index.html" pour éviter la boucle infinie
+function roleHome(r){ return {admin:"admin.html",teacher:"prof.html",parent:"parent.html"}[r]||null; }
+
 function sbEnabled(){ return !!(SUPABASE_URL&&SUPABASE_ANON_KEY&&window.supabase); }
 function sb(){
   return window.__sb||=window.supabase?.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
@@ -45,7 +47,11 @@ async function sbProfile(){
 async function requireRole(expected){
   const s=await sbSession(); if(!s){location.href="index.html";return null;}
   const p=await sbProfile();
-  if(!p||p.role!==expected){ toast("Accès refusé","Rôle requis : "+expected,"error"); setTimeout(()=>location.href=roleHome(p?.role||expected),700); return null; }
+  if(!p||p.role!==expected){
+    toast("Accès refusé","Rôle requis : "+expected,"error");
+    setTimeout(()=>{ const home=roleHome(p?.role); location.href=home||"index.html"; },700);
+    return null;
+  }
   const who=$("#who"); if(who) who.textContent=p.full_name||p.email||"";
   currentPlan=p.plan||"free"; currentPlanData=PLANS[currentPlan]||PLANS.free;
   const pb=$("#planBadge"); if(pb){pb.textContent=currentPlan.toUpperCase();pb.className="plan-badge plan-"+currentPlan;}
@@ -85,17 +91,39 @@ function initIndex(){
     const email=($("#email").value||"").trim(), pass=$("#password").value||"";
     if(!email||!pass){toast("Requis","Email et mot de passe obligatoires.","error");return;}
     if(!sbEnabled()){toast("Config","Supabase non configuré.","error");return;}
-    try{ const {error}=await sb().auth.signInWithPassword({email,password:pass}); if(error) throw error;
-      const p=await sbProfile(); location.href=roleHome(p?.role||localStorage.getItem("mcv_role")||"teacher");
+    try{
+      const {error}=await sb().auth.signInWithPassword({email,password:pass});
+      if(error) throw error;
+      const p=await sbProfile();
+      const home=roleHome(p?.role||localStorage.getItem("mcv_role")||"teacher");
+      if(home){ location.href=home; }
+      else { await sb().auth.signOut(); toast("Accès refusé","Ce compte n'a pas d'espace disponible.","error"); }
     }catch(e){toast("Erreur",e?.message||String(e),"error");}
   });
   $("#forgotBtn")?.addEventListener("click",async()=>{
     const email=($("#email").value||"").trim(); if(!email){toast("Email requis","","error");return;}
-    try{ const {error}=await sb().auth.resetPasswordForEmail(email,{redirectTo:location.origin+"/reset.html"});
+    try{
+      const {error}=await sb().auth.resetPasswordForEmail(email,{redirectTo:location.origin+"/reset.html"});
       if(error) throw error; toast("Email envoyé","Vérifie ta boîte mail.","success");
     }catch(e){toast("Erreur",e?.message||String(e),"error");}
   });
-  (async()=>{ if(!sbEnabled()) return; const s=await sbSession(); if(s){ const p=await sbProfile().catch(()=>null); if(p?.role) location.href=roleHome(p.role); } })();
+
+  // ✅ FIX 2 — auto-redirect sécurisé, déconnexion si rôle sans page
+  (async()=>{
+    if(!sbEnabled()) return;
+    const s=await sbSession();
+    if(s){
+      const p=await sbProfile().catch(()=>null);
+      const home=roleHome(p?.role);
+      if(home){
+        location.href=home;
+      } else {
+        // Rôle sans interface (student, inconnu) → déconnexion propre
+        await sb().auth.signOut();
+        toast("Accès refusé","Ce compte n'a pas d'espace disponible.","error");
+      }
+    }
+  })();
 }
 
 // ============================================
@@ -272,7 +300,6 @@ async function saveEleve(tid){
 
 // ============================================
 // PLAN DE SALLE v7d — CANVAS LIBRE
-// ✅ Fix : noms visibles + bureau décoratif + renommage
 // ============================================
 let salleClassId=null, salleLayout=[], salleEleves=[];
 let salleDragTable=null, salleDragStudent=null;
@@ -307,28 +334,17 @@ async function initSalle(tid){
   renderSalle(tid);
 }
 
-// ✅ Fonction principale de rendu — entièrement synchrone, pas de setTimeout
 function renderSalle(tid){
   const container=document.getElementById("planContainer");
   if(!container) return;
-
-  // ---- Map élèves ----
   const studentMap={};
-  salleEleves.forEach(e=>{
-    studentMap[e.id]={ id:e.id, first:String(e.first_name||""), last:String(e.last_name||"") };
-  });
-
-  // ---- Map place occupée ----
+  salleEleves.forEach(e=>{ studentMap[e.id]={ id:e.id, first:String(e.first_name||""), last:String(e.last_name||"") }; });
   const seatOccupied={};
   salleLayout.forEach(table=>{
-    (table.seats||[]).forEach(seat=>{
-      if(seat.studentId) seatOccupied[table.id+"|"+seat.pos]=String(seat.studentId);
-    });
+    (table.seats||[]).forEach(seat=>{ if(seat.studentId) seatOccupied[table.id+"|"+seat.pos]=String(seat.studentId); });
   });
   const placedIds=new Set(Object.values(seatOccupied));
   const unplaced=salleEleves.filter(e=>!placedIds.has(String(e.id)));
-
-  // ---- Construction HTML tables ----
   let tablesHtml="";
   salleLayout.forEach((table,tIdx)=>{
     const def=TABLE_TYPES[table.type]||{seats:1,icon:"▭",label:table.type};
@@ -337,16 +353,9 @@ function renderSalle(tid){
     const top =((table.yp??5))+"%";
     const cols=isBureau?1:(def.seats<=2?def.seats:Math.ceil(def.seats/2));
     const minW=isBureau?180:(cols*92);
-
     let seatsGrid="";
     if(isBureau){
-      seatsGrid=`<div style="
-        display:flex;align-items:center;justify-content:center;
-        min-height:52px;border-radius:8px;padding:10px 16px;
-        background:linear-gradient(135deg,#1e293b,#334155);
-        color:#fff;font-size:13px;font-weight:700;letter-spacing:1px;gap:6px">
-        🧑‍🏫 Professeur
-      </div>`;
+      seatsGrid=`<div style="display:flex;align-items:center;justify-content:center;min-height:52px;border-radius:8px;padding:10px 16px;background:linear-gradient(135deg,#1e293b,#334155);color:#fff;font-size:13px;font-weight:700;letter-spacing:1px;gap:6px">🧑‍🏫 Professeur</div>`;
     } else {
       seatsGrid=`<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:5px">`;
       (table.seats||[]).forEach((seat,sIdx)=>{
@@ -354,72 +363,47 @@ function renderSalle(tid){
         const sid=seatOccupied[key]||null;
         const stu=sid?studentMap[sid]:null;
         if(stu){
-          // ✅ Noms forcément en blanc sur fond bleu — valeurs lues directement depuis studentMap
-          seatsGrid+=`<div
-            draggable="true"
+          seatsGrid+=`<div draggable="true"
             ondragstart="event.stopPropagation();salleDragStudent='${stu.id}';event.dataTransfer.setData('text','student')"
             ondragover="event.preventDefault();event.stopPropagation()"
             ondrop="event.preventDefault();event.stopPropagation();salle_dropSeat(${tIdx},${sIdx},'${tid}')"
             onclick="event.stopPropagation();openFicheEleve('${stu.id}','${(stu.first+" "+stu.last).replace(/'/g,"\\'")}','')"
-            style="position:relative;border-radius:7px;padding:5px 4px;cursor:grab;
-              background:#2563eb;
-              min-width:80px;min-height:54px;
-              display:flex;flex-direction:column;
-              align-items:center;justify-content:center;text-align:center">
-            <span style="font-size:12px;font-weight:800;color:#FFFFFF;line-height:1.3;
-              display:block;width:100%;text-align:center;word-break:break-word">${stu.first}</span>
-            <span style="font-size:10px;color:#BFDBFE;line-height:1.2;
-              display:block;width:100%;text-align:center;word-break:break-word">${stu.last}</span>
-            <span onclick="event.stopPropagation();salle_unseat(${tIdx},${sIdx},'${tid}')"
-              style="position:absolute;top:2px;right:3px;font-size:11px;
-              color:#FCA5A5;cursor:pointer;line-height:1;font-weight:700">✕</span>
+            style="position:relative;border-radius:7px;padding:5px 4px;cursor:grab;background:#2563eb;min-width:80px;min-height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+            <span style="font-size:12px;font-weight:800;color:#FFFFFF;line-height:1.3;display:block;width:100%;text-align:center;word-break:break-word">${stu.first}</span>
+            <span style="font-size:10px;color:#BFDBFE;line-height:1.2;display:block;width:100%;text-align:center;word-break:break-word">${stu.last}</span>
+            <span onclick="event.stopPropagation();salle_unseat(${tIdx},${sIdx},'${tid}')" style="position:absolute;top:2px;right:3px;font-size:11px;color:#FCA5A5;cursor:pointer;line-height:1;font-weight:700">✕</span>
           </div>`;
         } else {
           seatsGrid+=`<div
             ondragover="event.preventDefault();event.stopPropagation()"
             ondrop="event.preventDefault();event.stopPropagation();salle_dropSeat(${tIdx},${sIdx},'${tid}')"
             onclick="event.stopPropagation();salle_pickStudent(${tIdx},${sIdx},'${tid}')"
-            style="border-radius:7px;padding:5px;
-              background:var(--bg-main);border:2px dashed var(--border);
-              min-width:80px;min-height:54px;
-              display:flex;align-items:center;justify-content:center;
-              cursor:pointer;color:var(--text-muted);font-size:22px;opacity:.5">
-            ＋
-          </div>`;
+            style="border-radius:7px;padding:5px;background:var(--bg-main);border:2px dashed var(--border);min-width:80px;min-height:54px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-muted);font-size:22px;opacity:.5">＋</div>`;
         }
       });
       seatsGrid+=`</div>`;
     }
-
-    tablesHtml+=`<div
-      style="position:absolute;left:${left};top:${top};
-        background:var(--bg-card);border:2px solid var(--border);border-radius:12px;
-        padding:8px 10px;cursor:move;z-index:10;
-        box-shadow:0 3px 10px rgba(0,0,0,.15);min-width:${minW}px"
+    tablesHtml+=`<div style="position:absolute;left:${left};top:${top};background:var(--bg-card);border:2px solid var(--border);border-radius:12px;padding:8px 10px;cursor:move;z-index:10;box-shadow:0 3px 10px rgba(0,0,0,.15);min-width:${minW}px"
       draggable="true"
       ondragstart="event.stopPropagation();salleDragTable=${tIdx};salleTableDragOffsetX=event.offsetX;salleTableDragOffsetY=event.offsetY;event.dataTransfer.setData('text','table')"
       ondragover="event.preventDefault()"
       ondrop="event.preventDefault();event.stopPropagation()">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:4px">
-        <span style="font-size:10px;font-weight:700;color:var(--text-muted);flex:1;cursor:pointer"
-          title="Double-clic pour renommer"
+        <span style="font-size:10px;font-weight:700;color:var(--text-muted);flex:1;cursor:pointer" title="Double-clic pour renommer"
           ondblclick="event.stopPropagation();salle_renameTable(${tIdx},'${tid}')">
           ${def.icon} ${table.label||def.label}
         </span>
         <span style="font-size:9px;opacity:.35;margin-right:2px" title="Double-clic sur le nom pour renommer">✏️</span>
-        <button onclick="event.stopPropagation();salle_removeTable(${tIdx},'${tid}')"
-          style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:11px;padding:0;line-height:1">✕</button>
+        <button onclick="event.stopPropagation();salle_removeTable(${tIdx},'${tid}')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:11px;padding:0;line-height:1">✕</button>
       </div>
       ${seatsGrid}
     </div>`;
   });
 
-  // ---- Construction HTML complet ----
   const toolbar=`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
     <span style="font-weight:700;font-size:12px;color:var(--text-muted)">➕ Ajouter :</span>
     ${Object.entries(TABLE_TYPES).map(([type,def])=>`
-      <button class="btn btn-secondary" style="font-size:11px;padding:5px 10px"
-        onclick="salle_addTable('${type}','${tid}')">
+      <button class="btn btn-secondary" style="font-size:11px;padding:5px 10px" onclick="salle_addTable('${type}','${tid}')">
         ${def.icon} ${def.label}
       </button>`).join("")}
     <div style="margin-left:auto;display:flex;gap:6px">
@@ -427,39 +411,21 @@ function renderSalle(tid){
       <button class="btn" style="font-size:11px;padding:5px 10px;background:#16a34a" onclick="salle_save()">💾 Enregistrer</button>
     </div>
   </div>`;
-
-  const bandeau=`<div style="background:linear-gradient(135deg,#1e293b,#334155);color:#fff;text-align:center;
-    padding:10px;border-radius:10px;margin-bottom:10px;font-size:12px;letter-spacing:2px;font-weight:600">
-    🖥 TABLEAU / BUREAU DU PROFESSEUR
-  </div>`;
-
-  const canvas=`<div id="salleCanvas"
-    style="position:relative;width:100%;min-height:560px;
-      background:var(--bg-main);border:2px dashed var(--border);border-radius:14px;overflow:hidden"
-    ondragover="event.preventDefault()"
-    ondrop="salle_dropCanvas(event,'${tid}')">
-    ${salleLayout.length===0?`<p style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-      color:var(--text-muted);font-size:14px;pointer-events:none;text-align:center;line-height:2">
-      Ajoute des tables ci-dessus,<br>puis glisse-les où tu veux</p>`:""}
+  const bandeau=`<div style="background:linear-gradient(135deg,#1e293b,#334155);color:#fff;text-align:center;padding:10px;border-radius:10px;margin-bottom:10px;font-size:12px;letter-spacing:2px;font-weight:600">🖥 TABLEAU / BUREAU DU PROFESSEUR</div>`;
+  const canvas=`<div id="salleCanvas" style="position:relative;width:100%;min-height:560px;background:var(--bg-main);border:2px dashed var(--border);border-radius:14px;overflow:hidden"
+    ondragover="event.preventDefault()" ondrop="salle_dropCanvas(event,'${tid}')">
+    ${salleLayout.length===0?`<p style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--text-muted);font-size:14px;pointer-events:none;text-align:center;line-height:2">Ajoute des tables ci-dessus,<br>puis glisse-les où tu veux</p>`:""}
     ${tablesHtml}
   </div>`;
-
   const unplacedSection=unplaced.length>0?`<div style="margin-top:14px">
-    <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--text-muted)">
-      👥 Élèves non placés — glisse ou clique ＋
-    </div>
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--text-muted)">👥 Élèves non placés — glisse ou clique ＋</div>
     <div style="display:flex;flex-wrap:wrap;gap:6px">
-      ${unplaced.map(e=>`<div class="seat-unplaced" draggable="true"
-        ondragstart="salleDragStudent='${e.id}';event.dataTransfer.setData('text','student')">
-        ${e.first_name} ${e.last_name}
-      </div>`).join("")}
+      ${unplaced.map(e=>`<div class="seat-unplaced" draggable="true" ondragstart="salleDragStudent='${e.id}';event.dataTransfer.setData('text','student')">${e.first_name} ${e.last_name}</div>`).join("")}
     </div>
   </div>`:"";
-
   container.innerHTML=toolbar+bandeau+canvas+unplacedSection;
 }
 
-// ---- Actions plan de salle ----
 window.salle_addTable=function(type,tid){
   const id="t_"+Date.now();
   const def=TABLE_TYPES[type];
@@ -471,10 +437,7 @@ window.salle_addTable=function(type,tid){
   renderSalle(tid);
 };
 window.salle_removeTable=function(tIdx,tid){ salleLayout.splice(tIdx,1); renderSalle(tid); };
-window.salle_clear=async function(tid){
-  if(!confirm("Vider toute la salle ?")) return;
-  salleLayout=[]; await salle_save(); renderSalle(tid);
-};
+window.salle_clear=async function(tid){ if(!confirm("Vider toute la salle ?")) return; salleLayout=[]; await salle_save(); renderSalle(tid); };
 window.salle_save=async function(){
   if(!salleClassId) return;
   try{ const {error}=await sb().from("classes").update({room_layout:salleLayout}).eq("id",salleClassId);
@@ -492,7 +455,6 @@ window.salle_dropCanvas=function(event,tid){
   salleDragTable=null;
   renderSalle(tid);
 };
-// ✅ Drop élève : 100% synchrone, pas de setTimeout, lecture directe depuis salleLayout
 window.salle_dropSeat=function(tIdx,sIdx,tid){
   const sid=salleDragStudent; if(!sid) return;
   salleDragStudent=null;
@@ -501,26 +463,20 @@ window.salle_dropSeat=function(tIdx,sIdx,tid){
   if(seat) seat.studentId=sid;
   renderSalle(tid);
 };
-window.salle_unseat=function(tIdx,sIdx,tid){
-  const seat=salleLayout[tIdx]?.seats?.[sIdx];
-  if(seat) seat.studentId=null;
-  renderSalle(tid);
-};
+window.salle_unseat=function(tIdx,sIdx,tid){ const seat=salleLayout[tIdx]?.seats?.[sIdx]; if(seat) seat.studentId=null; renderSalle(tid); };
 window.salle_pickStudent=function(tIdx,sIdx,tid){
   const placed=new Set();
   salleLayout.forEach(t=>(t.seats||[]).forEach(s=>{ if(s.studentId) placed.add(String(s.studentId)); }));
   const unplaced=salleEleves.filter(e=>!placed.has(String(e.id)));
   if(!unplaced.length){toast("Info","Tous les élèves sont déjà placés.");return;}
   document.getElementById("seatPickerModal")?.remove();
-  const modal=document.createElement("div");
-  modal.className="modal show"; modal.id="seatPickerModal";
+  const modal=document.createElement("div"); modal.className="modal show"; modal.id="seatPickerModal";
   modal.innerHTML=`<div class="modal-content" style="max-width:340px">
     <div class="modal-header"><h2>Placer un élève</h2>
       <button class="modal-close" onclick="document.getElementById('seatPickerModal').remove()">✕</button>
     </div>
     <div class="modal-body" style="max-height:300px;overflow-y:auto">
-      ${unplaced.map(e=>`<div class="list-item" style="cursor:pointer"
-        onclick="salle_placeFromPicker('${e.id}',${tIdx},${sIdx},'${tid}')">
+      ${unplaced.map(e=>`<div class="list-item" style="cursor:pointer" onclick="salle_placeFromPicker('${e.id}',${tIdx},${sIdx},'${tid}')">
         <div style="font-weight:600">${e.first_name} ${e.last_name}</div>
       </div>`).join("")}
     </div>
@@ -534,12 +490,10 @@ window.salle_placeFromPicker=function(studentId,tIdx,sIdx,tid){
   if(seat) seat.studentId=studentId;
   renderSalle(tid);
 };
-// ✅ Renommer table — double-clic sur le label
 window.salle_renameTable=function(tIdx,tid){
   const table=salleLayout[tIdx]; if(!table) return;
   document.getElementById("renameTableModal")?.remove();
-  const modal=document.createElement("div");
-  modal.className="modal show"; modal.id="renameTableModal";
+  const modal=document.createElement("div"); modal.className="modal show"; modal.id="renameTableModal";
   modal.innerHTML=`<div class="modal-content" style="max-width:340px">
     <div class="modal-header">
       <h2>✏️ Renommer la table</h2>
@@ -548,9 +502,7 @@ window.salle_renameTable=function(tIdx,tid){
     <div class="modal-body">
       <div class="form-group">
         <label>Nom de la table</label>
-        <input type="text" id="renameTableInput" class="input"
-          value="${(table.label||"").replace(/"/g,"&quot;")}"
-          placeholder="Ex : Groupe A"
+        <input type="text" id="renameTableInput" class="input" value="${(table.label||"").replace(/"/g,"&quot;")}" placeholder="Ex : Groupe A"
           onkeydown="if(event.key==='Enter') salle_confirmRename(${tIdx},'${tid}')">
       </div>
     </div>
@@ -981,6 +933,7 @@ function setupModalListeners(tid){
 // ADMIN
 // ============================================
 
+// ✅ FIX 3 — ajout du paramètre role
 async function adminCreateUser(email, password, plan = "free", role = "teacher") {
   const { data, error } = await sb().functions.invoke("admin-create-user", {
     body: { email, password, plan, role }
@@ -989,10 +942,9 @@ async function adminCreateUser(email, password, plan = "free", role = "teacher")
   return data;
 }
 
-// 1. Fonction — ajouter le support delete
-async function adminUpdateUser(targetUserId, { status, role, full_name, delete: doDelete } = {}) {
+async function adminUpdateUser(targetUserId, { status, role, full_name } = {}) {
   const { data, error } = await sb().functions.invoke("admin-update-user", {
-    body: { targetUserId, status, role, full_name, delete: doDelete }
+    body: { targetUserId, status, role, full_name }
   });
   if (error) throw new Error(error.message || "Erreur");
   return data;
@@ -1136,7 +1088,7 @@ async function initAdmin() {
   const p = await sbProfile();
   if (!p || p.role !== "admin") {
     toast("Accès refusé", "Réservé à l'admin", "error");
-    setTimeout(() => location.href = roleHome(p?.role || "teacher"), 700);
+    setTimeout(() => { const home=roleHome(p?.role); location.href=home||"index.html"; }, 700);
     return;
   }
   const who = $("#who"); if (who) who.textContent = p.full_name || p.email || "admin";
@@ -1164,6 +1116,7 @@ async function initAdmin() {
   $("#btnCancelEditUser")?.addEventListener("click",  () => { $("#modalEditUser").style.display = "none"; });
   $("#btnCancelEditUser2")?.addEventListener("click", () => { $("#modalEditUser").style.display = "none"; });
 
+  // Ton code de suppression existant — inchangé ✅
   $("#btnDeleteUser")?.addEventListener("click", () => {
     const id = $("#editUserId").value;
     $("#confirmText").textContent = "Supprimer cet utilisateur ? Cette action est irréversible.";
