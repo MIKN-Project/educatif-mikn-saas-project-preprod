@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Educatif MIKN • Réinitialisation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="top">
+    <div class="topin">
+      <div class="brand">📚 Educatif MIKN</div>
+      <button class="btn ghost" id="themeBtn">🌙</button>
+    </div>
+  </div>
+
+  <div class="login">
+    <div class="wrap">
+      <div class="left">
+        <h1 class="h1">Réinitialiser le mot de passe</h1>
+        <p class="sub">Entrez votre nouveau mot de passe pour accéder à votre compte.</p>
+      </div>
+      <div class="right">
+        <h2 style="margin:0 0 20px">Nouveau mot de passe</h2>
+        <div class="field">
+          <label>Nouveau mot de passe</label>
+          <input type="password" id="newPassword" placeholder="••••••••">
+        </div>
+        <div class="field">
+          <label>Confirmer le mot de passe</label>
+          <input type="password" id="confirmPassword" placeholder="••••••••">
+        </div>
+        <div class="btnrow">
+          <button class="btn primary" id="resetBtn">Réinitialiser</button>
+          <button class="btn" onclick="location.href='index.html'">Retour</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">
+    <strong id="toastTitle"></strong>
+    <div class="msg" id="toastMsg"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+  <script>
+    applyTheme();
+    $("#themeBtn")?.addEventListener("click", toggleTheme);
+
+    $("#resetBtn")?.addEventListener("click", async ()=>{
+      const newPwd = $("#newPassword").value || "";
+      const conf = $("#confirmPassword").value || "";
+
+      if(!newPwd || newPwd.length < 6){
+        toast("Erreur", "Le mot de passe doit faire au moins 6 caractères");
+        return;
+      }
+
+      if(newPwd !== conf){
+        toast("Erreur", "Les mots de passe ne correspondent pas");
+        return;
+      }
+
+      if(!sbEnabled()){
+        toast("Erreur", "Supabase non chargé");
+        return;
+      }
+
+      try{
+        const { error } = await sb().auth.updateUser({ password: newPwd });
+        if(error) throw error;
+
+        toast("Succès", "Mot de passe mis à jour");
+        setTimeout(()=> location.href="index.html", 1500);
+      }catch(e){
+        toast("Erreur", e.message);
+      }
+    });
+  </script>
+</body>
+</html>

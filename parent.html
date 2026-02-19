@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Espace Parent - Educatif MIKN</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-title">
+      <h1 id="pageTitle">Espace parent</h1>
+      <p id="pageSubtitle">Suivi de votre enfant</p>
+    </div>
+    <div class="header-actions">
+      <span id="who" class="header-user"></span>
+      <button id="themeBtn" class="btn-icon">🌙</button>
+      <button id="logoutBtn" class="btn btn-secondary">Déconnexion</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">M</div>
+        <div>
+          <div class="sidebar-title">Educatif MIKN</div>
+          <div class="sidebar-subtitle">Espace parent</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section">SUIVI</div>
+        <a href="#" class="nav-item active" data-view="dashboard">
+          <span class="nav-icon">📊</span> Tableau de bord
+        </a>
+        <a href="#" class="nav-item" data-view="notes">
+          <span class="nav-icon">📝</span> Notes & évaluations
+        </a>
+        <a href="#" class="nav-item" data-view="comportement">
+          <span class="nav-icon">⭐</span> Comportement
+        </a>
+        <a href="#" class="nav-item" data-view="activites">
+          <span class="nav-icon">✏️</span> Activités à faire
+        </a>
+        <div class="nav-section">COMMUNICATION</div>
+        <a href="#" class="nav-item" data-view="messages">
+          <span class="nav-icon">💬</span> Contacter le prof
+          <span class="nav-badge" id="parentMsgBadge" style="display:none"></span>
+        </a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+
+      <!-- Sélecteur enfant (si plusieurs enfants) -->
+      <div id="childSelector" style="display:none;margin-bottom:20px">
+        <div class="panel" style="padding:14px 20px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span style="font-weight:700;font-size:14px">👧 Mon enfant :</span>
+            <select id="childSelect" class="input" style="width:220px"></select>
+          </div>
+        </div>
+      </div>
+
+      <!-- DASHBOARD -->
+      <div id="view-dashboard" class="view active">
+        <div class="cards">
+          <div class="card">
+            <div class="card-icon card-icon-yellow">📝</div>
+            <div class="card-content">
+              <div class="card-value" id="p-stat-moyenne">-</div>
+              <div class="card-label">Moyenne générale</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-icon card-icon-blue">✏️</div>
+            <div class="card-content">
+              <div class="card-value" id="p-stat-activites">0</div>
+              <div class="card-label">Activités en attente</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-icon card-icon-green">💬</div>
+            <div class="card-content">
+              <div class="card-value" id="p-stat-messages">0</div>
+              <div class="card-label">Messages non lus</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:20px">
+          <div class="panel-header"><h2>Dernières notes</h2></div>
+          <div id="parentNotesList">
+            <p class="panel-empty">Aucune note disponible.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- NOTES -->
+      <div id="view-notes" class="view">
+        <div class="panel">
+          <div class="panel-header"><h2>Notes &amp; évaluations</h2></div>
+          <p class="panel-empty">Les notes de votre enfant apparaîtront ici.</p>
+        </div>
+      </div>
+
+      <!-- COMPORTEMENT -->
+      <div id="view-comportement" class="view">
+        <div class="panel">
+          <div class="panel-header"><h2>Comportement &amp; incidents</h2></div>
+          <p class="panel-empty">Aucun incident ou remarque enregistré.</p>
+        </div>
+      </div>
+
+      <!-- ACTIVITÉS -->
+      <div id="view-activites" class="view">
+        <div class="panel">
+          <div class="panel-header"><h2>Activités à faire</h2></div>
+          <p class="panel-empty">Aucune activité en attente.</p>
+        </div>
+      </div>
+
+      <!-- MESSAGES -->
+      <div id="view-messages" class="view">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Message au professeur</h2>
+          </div>
+          <div id="messagesList" style="margin-bottom:20px">
+            <p class="panel-empty">Aucun message échangé.</p>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-end">
+            <textarea id="messageText" class="input" rows="3"
+              placeholder="Écrivez votre message au professeur…"
+              style="flex:1"></textarea>
+            <button class="btn" id="btnSendMessage" style="flex-shrink:0">Envoyer</button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <div id="toast" class="toast">
+    <strong id="toastTitle"></strong>
+    <p id="toastMsg"></p>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function(){
+      if(typeof initParent === 'function') initParent();
+    });
+  </script>
+</body>
+</html>

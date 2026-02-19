@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Espace Élève - Educatif MIKN</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-title">
+      <h1 id="pageTitle">Mon espace</h1>
+      <p id="pageSubtitle">Bienvenue dans ton espace élève</p>
+    </div>
+    <div class="header-actions">
+      <span id="who" class="header-user"></span>
+      <button id="themeBtn" class="btn-icon">🌙</button>
+      <button id="logoutBtn" class="btn btn-secondary">Déconnexion</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">M</div>
+        <div>
+          <div class="sidebar-title">Educatif MIKN</div>
+          <div class="sidebar-subtitle">Espace élève</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section">MON ESPACE</div>
+        <a href="#" class="nav-item active" data-view="dashboard">
+          <span class="nav-icon">📊</span> Tableau de bord
+        </a>
+        <a href="#" class="nav-item" data-view="notes">
+          <span class="nav-icon">📝</span> Mes notes
+        </a>
+        <a href="#" class="nav-item" data-view="activites">
+          <span class="nav-icon">✏️</span> Mes activités
+        </a>
+        <a href="#" class="nav-item" data-view="quiz">
+          <span class="nav-icon">🧠</span> Quiz
+        </a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+
+      <!-- DASHBOARD -->
+      <div id="view-dashboard" class="view active">
+        <div class="cards">
+          <div class="card">
+            <div class="card-icon card-icon-yellow">📝</div>
+            <div class="card-content">
+              <div class="card-value" id="stat-notes">-</div>
+              <div class="card-label">Dernière note</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-icon card-icon-blue">✏️</div>
+            <div class="card-content">
+              <div class="card-value" id="stat-activites">0</div>
+              <div class="card-label">Activités à faire</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-icon card-icon-green">🧠</div>
+            <div class="card-content">
+              <div class="card-value" id="stat-quiz">0</div>
+              <div class="card-label">Quiz disponibles</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:20px">
+          <div class="panel-header"><h2>Mes prochaines activités</h2></div>
+          <div id="eleveActivitesList">
+            <p class="panel-empty">Aucune activité en cours.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- NOTES -->
+      <div id="view-notes" class="view">
+        <div class="panel">
+          <div class="panel-header"><h2>Mes notes</h2></div>
+          <p class="panel-empty">Tes notes apparaîtront ici une fois que ton professeur les aura saisies.</p>
+        </div>
+      </div>
+
+      <!-- ACTIVITÉS -->
+      <div id="view-activites" class="view">
+        <div class="panel">
+          <div class="panel-header"><h2>Mes activités</h2></div>
+          <p class="panel-empty">Aucune activité assignée pour le moment.</p>
+        </div>
+      </div>
+
+      <!-- QUIZ -->
+      <div id="view-quiz" class="view">
+        <div class="panel">
+          <div class="panel-header"><h2>Mes quiz</h2></div>
+          <p class="panel-empty">Aucun quiz disponible pour le moment.</p>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <div id="toast" class="toast">
+    <strong id="toastTitle"></strong>
+    <p id="toastMsg"></p>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function(){
+      if(typeof initEleve === 'function') initEleve();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connexion - Educatif MIKN</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <div class="login-wrapper">
+    <div class="login-card">
+
+      <div class="login-logo">
+        <div class="login-logo-icon">M</div>
+        <div class="login-logo-text">Educatif MIKN</div>
+      </div>
+
+      <h1>Bienvenue 👋</h1>
+      <p class="subtitle">La plateforme tout-en-un pour gérer votre classe.</p>
+
+      <!-- Onglets rôle -->
+      <div class="role-tabs">
+        <button data-role="teacher">📊 Professeur</button>
+        <button data-role="parent">👨‍👩‍👧 Parent</button>
+        <button data-role="student">🎓 Élève</button>
+      </div>
+
+      <h2 style="font-size:18px;margin:0 0 16px">Connexion</h2>
+
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="email" class="input" placeholder="exemple@email.com">
+      </div>
+      <div class="form-group">
+        <label>Mot de passe</label>
+        <input type="password" id="password" class="input" placeholder="••••••••">
+      </div>
+
+      <div class="login-actions">
+        <button id="loginBtn" class="btn">Se connecter</button>
+        <button id="forgotBtn" class="btn btn-secondary">Mot de passe oublié ?</button>
+      </div>
+
+      <p class="login-footer">
+        Pas encore de compte ? Contactez votre établissement ou créez votre compte professeur.
+      </p>
+
+    </div>
+
+    <div style="position:fixed;top:16px;right:16px">
+      <button id="themeBtn" class="btn-icon">🌙</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">
+    <strong id="toastTitle"></strong>
+    <p id="toastMsg"></p>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function(){
+      if(typeof initIndex === 'function') initIndex();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Administration - Educatif MIKN</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-title">
+      <h1 id="pageTitle">Administration</h1>
+      <p id="pageSubtitle">Gestion globale de la plateforme</p>
+    </div>
+    <div class="header-actions">
+      <span id="who" class="header-user"></span>
+      <button id="themeBtn" class="btn-icon">🌙</button>
+      <button id="logoutBtn" class="btn btn-secondary">Déconnexion</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">M</div>
+        <div><div class="sidebar-title">Educatif MIKN</div><div class="sidebar-subtitle">Super Admin</div></div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section">ADMINISTRATION</div>
+        <a href="#" class="nav-item active" data-view="dashboard"><span class="nav-icon">📊</span> Tableau de bord</a>
+        <a href="#" class="nav-item" data-view="users"><span class="nav-icon">👥</span> Utilisateurs</a>
+        <a href="#" class="nav-item" data-view="licences"><span class="nav-icon">🔑</span> Licences & plans</a>
+        <a href="#" class="nav-item" data-view="stats"><span class="nav-icon">📈</span> Statistiques</a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+
+      <!-- DASHBOARD -->
+      <div id="view-dashboard" class="view active">
+        <div class="cards">
+          <div class="card">
+            <div class="card-icon card-icon-yellow">👩‍🏫</div>
+            <div class="card-content"><div class="card-value" id="a-stat-profs">0</div><div class="card-label">Professeurs</div></div>
+          </div>
+          <div class="card">
+            <div class="card-icon card-icon-blue">👥</div>
+            <div class="card-content"><div class="card-value" id="a-stat-eleves">0</div><div class="card-label">Élèves</div></div>
+          </div>
+          <div class="card">
+            <div class="card-icon card-icon-green">👨‍👩‍👧</div>
+            <div class="card-content"><div class="card-value" id="a-stat-parents">0</div><div class="card-label">Parents</div></div>
+          </div>
+          <div class="card">
+            <div class="card-icon card-icon-purple">🛡️</div>
+            <div class="card-content"><div class="card-value" id="a-stat-admins">0</div><div class="card-label">Admins</div></div>
+          </div>
+          <div class="card">
+            <div class="card-icon card-icon-orange">🔑</div>
+            <div class="card-content"><div class="card-value" id="a-stat-total">0</div><div class="card-label">Total utilisateurs</div></div>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:20px">
+          <div class="panel-header"><h2>Derniers inscrits</h2><button class="btn" onclick="adminSwitchView('users')">Voir tous</button></div>
+          <div id="adminRecentList"><p class="panel-empty">Chargement…</p></div>
+        </div>
+      </div>
+
+      <!-- UTILISATEURS -->
+      <div id="view-users" class="view">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Tous les utilisateurs</h2>
+            <div class="panel-actions">
+              <input type="text" id="adminSearch" class="input" style="width:220px" placeholder="🔍 Rechercher…" oninput="adminLoadUsers()">
+              <select id="adminRoleFilter" class="input" style="width:160px" onchange="adminLoadUsers()">
+                <option value="">Tous les rôles</option>
+                <option value="admin">Admin</option>
+                <option value="teacher">Professeur</option>
+                <option value="parent">Parent</option>
+                <option value="student">Élève</option>
+              </select>
+            </div>
+          </div>
+          <div id="adminUsersList"><p class="panel-empty">Chargement…</p></div>
+        </div>
+      </div>
+
+      <!-- LICENCES -->
+      <div id="view-licences" class="view">
+        <div class="panel">
+          <div class="panel-header"><h2>Plans & licences</h2></div>
+          <p style="font-size:14px;color:var(--text-muted);margin-bottom:16px">Gérez les plans d'abonnement des professeurs.</p>
+          <div id="adminLicencesList"><p class="panel-empty">Chargement…</p></div>
+        </div>
+      </div>
+
+      <!-- STATS -->
+      <div id="view-stats" class="view">
+        <div class="panel">
+          <div class="panel-header"><h2>Statistiques globales</h2></div>
+          <div id="adminStatsDetail"><p class="panel-empty">Chargement…</p></div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- MODAL édition utilisateur -->
+  <div id="modalEditUser" class="modal">
+    <div class="modal-content" style="max-width:440px">
+      <div class="modal-header"><h2>Modifier l'utilisateur</h2><button class="modal-close" id="btnCancelEditUser">✕</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="editUserId">
+        <div class="form-group"><label>Nom complet</label><input type="text" id="editUserName" class="input"></div>
+        <div class="form-group"><label>Email</label><input type="text" id="editUserEmail" class="input" disabled style="opacity:.6"></div>
+        <div class="form-group"><label>Rôle</label>
+          <select id="editUserRole" class="input">
+            <option value="admin">🛡️ Admin</option>
+            <option value="teacher">👩‍🏫 Professeur</option>
+            <option value="parent">👨‍👩‍👧 Parent</option>
+            <option value="student">🎒 Élève</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Statut du compte</label>
+          <select id="editUserStatus" class="input">
+            <option value="active">✅ Actif</option>
+            <option value="suspended">⏸ Suspendu</option>
+            <option value="blocked">🚫 Bloqué</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" style="background:#ef4444;margin-right:auto" id="btnDeleteUser">🗑 Supprimer</button>
+        <button class="btn btn-secondary" id="btnCancelEditUser2">Annuler</button>
+        <button class="btn" id="btnSaveEditUser">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL confirmation -->
+  <div id="modalConfirm" class="modal">
+    <div class="modal-content" style="max-width:380px">
+      <div class="modal-header"><h2>Confirmer</h2><button class="modal-close" id="btnCancelConfirm">✕</button></div>
+      <div class="modal-body"><p id="confirmText" style="color:var(--text-muted);font-size:14px">Cette action est irréversible.</p></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnCancelConfirm2">Annuler</button>
+        <button class="btn" id="btnConfirmAction" style="background:#ef4444">Confirmer</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"><strong id="toastTitle"></strong><p id="toastMsg"></p></div>
+
+  <script src="app.js"></script>
+  <script>document.addEventListener('DOMContentLoaded',()=>{ if(typeof initAdmin==='function') initAdmin(); });</script>
+</body>
+</html>
