@@ -980,123 +980,204 @@ function setupModalListeners(tid){
 // ============================================
 // ADMIN
 // ============================================
-async function initAdmin(){
-  bindHeader();
-  const s=await sbSession(); if(!s){location.href="index.html";return;}
-  const p=await sbProfile();
-  if(!p||p.role!=="admin"){ toast("Accès refusé","Réservé à l'admin","error"); setTimeout(()=>location.href=roleHome(p?.role||"teacher"),700); return; }
-  const who=$("#who"); if(who) who.textContent=p.full_name||p.email||"admin";
-  $$(".nav-item").forEach(item=>item.addEventListener("click",e=>{ e.preventDefault(); adminSwitchView(item.dataset.view); }));
-  ["btnCancelEditUser","btnCancelEditUser2"].forEach(id=>$("#"+id)?.addEventListener("click",()=>$("#modalEditUser").classList.remove("show")));
-  ["btnCancelConfirm","btnCancelConfirm2"].forEach(id=>$("#"+id)?.addEventListener("click",()=>$("#modalConfirm").classList.remove("show")));
-  $("#btnSaveEditUser")?.addEventListener("click",saveEditUser);
-  await adminLoadStats(); await adminLoadRecent();
+
+async function adminCreateUser(email, password, plan = "free") {
+  const { data, error } = await sb().functions.invoke("admin-create-user", {
+    body: { email, password, plan }
+  });
+  if (error) throw new Error(error.message || "Erreur Edge Function");
+  return data;
 }
-window.adminSwitchView=function(view){
-  $$(".nav-item").forEach(i=>i.classList.toggle("active",i.dataset.view===view));
-  $$(".view").forEach(v=>v.classList.toggle("active",v.id==="view-"+view));
-  const t={dashboard:"Tableau de bord",users:"Utilisateurs",licences:"Licences & plans",stats:"Statistiques"};
-  if($("#pageTitle")) $("#pageTitle").textContent=t[view]||view;
-  if(view==="users")    adminLoadUsers();
-  if(view==="licences") adminLoadLicences();
-  if(view==="stats")    adminLoadStatsDetail();
+
+async function adminUpdateUser(targetUserId, { status, role, full_name } = {}) {
+  const { data, error } = await sb().functions.invoke("admin-update-user", {
+    body: { targetUserId, status, role, full_name }
+  });
+  if (error) throw new Error(error.message || "Erreur");
+  return data;
+}
+
+window.adminSwitchView = function(view) {
+  $$(".nav-item").forEach(i => i.classList.toggle("active", i.dataset.view === view));
+  $$(".view").forEach(v => v.classList.toggle("active", v.id === "view-" + view));
+  const t = { dashboard:"Tableau de bord", users:"Utilisateurs", licences:"Licences & plans", stats:"Statistiques" };
+  if ($("#pageTitle")) $("#pageTitle").textContent = t[view] || view;
+  if (view === "users")    adminLoadUsers();
+  if (view === "licences") adminLoadLicences();
+  if (view === "stats")    adminLoadStatsDetail();
 };
-async function adminLoadStats(){
-  try{
-    const [{data:pr},{data:pa},{data:ad},{data:all},{data:et}]=await Promise.all([
-      sb().from("profiles").select("id").eq("role","teacher"),sb().from("profiles").select("id").eq("role","parent"),
-      sb().from("profiles").select("id").eq("role","admin"),sb().from("profiles").select("id"),sb().from("students").select("id")
+
+async function adminLoadStats() {
+  try {
+    const [{ data:pr },{ data:pa },{ data:ad },{ data:all },{ data:et }] = await Promise.all([
+      sb().from("profiles").select("id").eq("role","teacher"),
+      sb().from("profiles").select("id").eq("role","parent"),
+      sb().from("profiles").select("id").eq("role","admin"),
+      sb().from("profiles").select("id"),
+      sb().from("students").select("id")
     ]);
-    if($("#a-stat-profs"))   $("#a-stat-profs").textContent=pr?.length||0;
-    if($("#a-stat-parents")) $("#a-stat-parents").textContent=pa?.length||0;
-    if($("#a-stat-admins"))  $("#a-stat-admins").textContent=ad?.length||0;
-    if($("#a-stat-eleves"))  $("#a-stat-eleves").textContent=et?.length||0;
-    if($("#a-stat-total"))   $("#a-stat-total").textContent=all?.length||0;
-  }catch(e){}
+    if ($("#a-stat-profs"))   $("#a-stat-profs").textContent   = pr?.length  || 0;
+    if ($("#a-stat-parents")) $("#a-stat-parents").textContent = pa?.length  || 0;
+    if ($("#a-stat-admins"))  $("#a-stat-admins").textContent  = ad?.length  || 0;
+    if ($("#a-stat-eleves"))  $("#a-stat-eleves").textContent  = et?.length  || 0;
+    if ($("#a-stat-total"))   $("#a-stat-total").textContent   = all?.length || 0;
+  } catch(e) { console.error(e); }
 }
-async function adminLoadRecent(){
-  try{ const {data}=await sb().from("profiles").select("id,email,role,full_name,created_at").order("created_at",{ascending:false}).limit(8);
-    const container=$("#adminRecentList"); if(!container) return;
-    container.innerHTML=data?.length?renderUserList(data,false):'<p class="panel-empty">Aucun utilisateur.</p>';
-  }catch(e){}
+
+async function adminLoadRecent() {
+  try {
+    const { data } = await sb().from("profiles").select("id,email,role,full_name,created_at")
+      .order("created_at", { ascending: false }).limit(8);
+    const container = $("#adminRecentList"); if (!container) return;
+    container.innerHTML = data?.length ? renderUserList(data, false) : '<p class="panel-empty">Aucun utilisateur.</p>';
+  } catch(e) {}
 }
-async function adminLoadUsers(){
-  const q=($("#adminSearch")?.value||"").trim().toLowerCase(), rf=$("#adminRoleFilter")?.value||"";
-  try{ let query=sb().from("profiles").select("id,email,role,full_name,status,created_at").order("created_at",{ascending:false});
-    if(rf) query=query.eq("role",rf);
-    const {data,error}=await query; if(error) throw error;
-    const filtered=(data||[]).filter(u=>!q||(u.email||"").toLowerCase().includes(q)||(u.full_name||"").toLowerCase().includes(q));
-    const container=$("#adminUsersList"); if(!container) return;
-    container.innerHTML=filtered.length?renderUserList(filtered,true):'<p class="panel-empty">Aucun résultat.</p>';
-  }catch(e){toast("Erreur",e.message,"error");}
+
+async function adminLoadUsers() {
+  const q  = ($("#adminSearch")?.value  || "").trim().toLowerCase();
+  const rf = ($("#adminRoleFilter")?.value || "");
+  try {
+    let query = sb().from("profiles").select("id,email,role,full_name,status,created_at").order("created_at",{ascending:false});
+    if (rf) query = query.eq("role", rf);
+    const { data, error } = await query; if (error) throw error;
+    const filtered = (data || []).filter(u => !q || (u.email||"").toLowerCase().includes(q) || (u.full_name||"").toLowerCase().includes(q));
+    const container = $("#adminUsersList"); if (!container) return;
+    container.innerHTML = filtered.length ? renderUserList(filtered, true) : '<p class="panel-empty">Aucun résultat.</p>';
+  } catch(e) { toast("Erreur", e.message, "error"); }
 }
-window.adminLoadUsers=adminLoadUsers;
-function renderUserList(data,showEdit){
-  const rc={admin:"#7c3aed",teacher:"#1d4ed8",parent:"#15803d",student:"#b45309"};
-  const rl={admin:"🛡️ Admin",teacher:"👩‍🏫 Prof",parent:"👨‍👩‍👧 Parent",student:"🎒 Élève"};
-  return data.map(u=>`<div class="list-item">
+window.adminLoadUsers = adminLoadUsers;
+
+function renderUserList(data, showEdit) {
+  const rc = { admin:"#7c3aed", teacher:"#1d4ed8", parent:"#15803d", student:"#b45309" };
+  const rl = { admin:"🛡️ Admin", teacher:"👩‍🏫 Prof", parent:"👨‍👩‍👧 Parent", student:"🎒 Élève" };
+  const sb_map = {
+    active:    "<span style='color:#22c55e;font-weight:700'>✅ Actif</span>",
+    suspended: "<span style='color:#f59e0b;font-weight:700'>⏸ Suspendu</span>",
+    blocked:   "<span style='color:#ef4444;font-weight:700'>🚫 Bloqué</span>",
+  };
+  return data.map(u => `<div class="list-item">
     <div style="flex:1">
-      <div style="font-weight:700">${u.full_name||"(Sans nom)"}</div>
-      <div style="font-size:13px;color:var(--text-muted)">${u.email||""} • ${u.created_at?new Date(u.created_at).toLocaleDateString("fr-FR"):"-"}</div>
+      <div style="font-weight:700">${u.full_name || "(Sans nom)"}</div>
+      <div style="font-size:13px;color:var(--text-muted)">${u.email||""} • ${u.created_at ? new Date(u.created_at).toLocaleDateString("fr-FR") : "-"}</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <span style="background:${rc[u.role]||"#6b7280"};color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700">${rl[u.role]||u.role}</span>
-      ${showEdit?`<button class="btn btn-secondary" style="font-size:13px" onclick="openEditUser('${u.id}','${(u.full_name||"").replace(/'/g,"\\'")}','${u.email||""}','${u.role}','${u.status||"active"}')">✏️ Gérer</button>`:""}
+      ${sb_map[u.status||"active"] || sb_map.active}
+      ${showEdit ? `<button class="btn btn-secondary" style="font-size:13px" onclick="openEditUser('${u.id}','${(u.full_name||"").replace(/'/g,"\\'")}','${u.email||""}','${u.role}','${u.status||"active"}')">✏️ Gérer</button>` : ""}
     </div>
   </div>`).join("");
 }
-window.openEditUser=function(id,name,email,role,status){
-  if($("#editUserId"))     $("#editUserId").value=id;
-  if($("#editUserName"))   $("#editUserName").value=name;
-  if($("#editUserEmail"))  $("#editUserEmail").value=email;
-  if($("#editUserRole"))   $("#editUserRole").value=role;
-  if($("#editUserStatus")) $("#editUserStatus").value=status||"active";
-  $("#modalEditUser").classList.add("show");
+
+window.openEditUser = function(id, name, email, role, status) {
+  if ($("#editUserId"))     $("#editUserId").value     = id;
+  if ($("#editUserName"))   $("#editUserName").value   = name;
+  if ($("#editUserEmail"))  $("#editUserEmail").value  = email;
+  if ($("#editUserRole"))   $("#editUserRole").value   = role;
+  if ($("#editUserStatus")) $("#editUserStatus").value = status || "active";
+  $("#modalEditUser").style.display = "flex";
 };
-async function saveEditUser(){
-  const id=$("#editUserId").value, name=$("#editUserName").value.trim(), role=$("#editUserRole").value, status=$("#editUserStatus").value;
-  try{ await sb().from("profiles").update({full_name:name,role,status}).eq("id",id);
-    $("#modalEditUser").classList.remove("show"); toast("Mis à jour","✅","success"); await adminLoadUsers(); await adminLoadStats();
-  }catch(e){toast("Erreur",e.message,"error");}
+
+async function adminLoadLicences() {
+  try {
+    const { data } = await sb().from("profiles").select("id,email,full_name,plan,plan_status").eq("role","teacher").order("email");
+    const container = $("#adminLicencesList"); if (!container) return;
+    container.innerHTML = (data||[]).length
+      ? data.map(u => `<div class="list-item">
+          <div><div style="font-weight:700">${u.full_name||u.email}</div><div style="font-size:13px;color:var(--text-muted)">${u.email}</div></div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select class="input" style="width:120px" onchange="adminUpdatePlan('${u.id}',this.value)">
+              <option value="free"   ${(u.plan||"free")==="free"   ? "selected":""}>🆓 Free</option>
+              <option value="pro"    ${u.plan==="pro"    ? "selected":""}>🚀 Pro</option>
+              <option value="school" ${u.plan==="school" ? "selected":""}>🏫 School</option>
+            </select>
+            <span class="badge-blue">${u.plan_status||"trial"}</span>
+          </div>
+        </div>`).join("")
+      : '<p class="panel-empty">Aucun professeur.</p>';
+  } catch(e) {}
 }
-async function adminLoadLicences(){
-  try{ const {data}=await sb().from("profiles").select("id,email,full_name,plan,plan_status").eq("role","teacher").order("email");
-    const container=$("#adminLicencesList"); if(!container) return;
-    container.innerHTML=(data||[]).length?(data.map(u=>`<div class="list-item">
-      <div><div style="font-weight:700">${u.full_name||u.email}</div><div style="font-size:13px;color:var(--text-muted)">${u.email}</div></div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <select class="input" style="width:120px" onchange="adminUpdatePlan('${u.id}',this.value)">
-          <option value="free"   ${(u.plan||"free")==="free"?"selected":""}>🆓 Free</option>
-          <option value="pro"    ${u.plan==="pro"?"selected":""}>🚀 Pro</option>
-          <option value="school" ${u.plan==="school"?"selected":""}>🏫 School</option>
-        </select>
-        <span class="badge-blue">${u.plan_status||"trial"}</span>
-      </div>
-    </div>`).join("")):'<p class="panel-empty">Aucun professeur.</p>';
-  }catch(e){}
-}
-window.adminUpdatePlan=async function(uid,plan){
-  try{ await sb().from("profiles").update({plan}).eq("id",uid); toast("Plan mis à jour","✅","success"); }
-  catch(e){toast("Erreur",e.message,"error");}
+window.adminUpdatePlan = async function(uid, plan) {
+  try { await sb().from("profiles").update({ plan }).eq("id", uid); toast("Plan mis à jour","✅","success"); }
+  catch(e) { toast("Erreur", e.message, "error"); }
 };
-async function adminLoadStatsDetail(){
-  try{
-    const [{data:pr},{data:pa},{data:ad},{data:el},{data:cl},{data:ev},{data:ac}]=await Promise.all([
-      sb().from("profiles").select("id").eq("role","teacher"),sb().from("profiles").select("id").eq("role","parent"),
-      sb().from("profiles").select("id").eq("role","admin"),sb().from("students").select("id"),
-      sb().from("classes").select("id"),sb().from("evaluations").select("id"),sb().from("activities").select("id")
+
+async function adminLoadStatsDetail() {
+  try {
+    const [{ data:pr },{ data:pa },{ data:ad },{ data:el },{ data:cl },{ data:ev },{ data:ac }] = await Promise.all([
+      sb().from("profiles").select("id").eq("role","teacher"),
+      sb().from("profiles").select("id").eq("role","parent"),
+      sb().from("profiles").select("id").eq("role","admin"),
+      sb().from("students").select("id"),
+      sb().from("classes").select("id"),
+      sb().from("evaluations").select("id"),
+      sb().from("activities").select("id")
     ]);
-    const container=$("#adminStatsDetail"); if(!container) return;
-    container.innerHTML=`<div class="cards">
-      <div class="card"><div class="card-icon card-icon-yellow">👩‍🏫</div><div class="card-content"><div class="card-value">${pr?.length||0}</div><div class="card-label">Professeurs</div></div></div>
-      <div class="card"><div class="card-icon card-icon-blue">👨‍👩‍👧</div><div class="card-content"><div class="card-value">${pa?.length||0}</div><div class="card-label">Parents</div></div></div>
-      <div class="card"><div class="card-icon card-icon-green">👥</div><div class="card-content"><div class="card-value">${el?.length||0}</div><div class="card-label">Élèves</div></div></div>
-      <div class="card"><div class="card-icon card-icon-purple">🛡️</div><div class="card-content"><div class="card-value">${ad?.length||0}</div><div class="card-label">Admins</div></div></div>
-    </div>
-    <div class="cards" style="margin-top:16px">
-      <div class="card"><div class="card-icon card-icon-yellow">📚</div><div class="card-content"><div class="card-value">${cl?.length||0}</div><div class="card-label">Classes</div></div></div>
-      <div class="card"><div class="card-icon card-icon-blue">📝</div><div class="card-content"><div class="card-value">${ev?.length||0}</div><div class="card-label">Évaluations</div></div></div>
-      <div class="card"><div class="card-icon card-icon-green">✏️</div><div class="card-content"><div class="card-value">${ac?.length||0}</div><div class="card-label">Activités</div></div></div>
-    </div>`;
-  }catch(e){}
+    const container = $("#adminStatsDetail"); if (!container) return;
+    container.innerHTML = `
+      <div class="cards">
+        <div class="card"><div class="card-icon card-icon-yellow">👩‍🏫</div><div class="card-content"><div class="card-value">${pr?.length||0}</div><div class="card-label">Professeurs</div></div></div>
+        <div class="card"><div class="card-icon card-icon-blue">👨‍👩‍👧</div><div class="card-content"><div class="card-value">${pa?.length||0}</div><div class="card-label">Parents</div></div></div>
+        <div class="card"><div class="card-icon card-icon-green">👥</div><div class="card-content"><div class="card-value">${el?.length||0}</div><div class="card-label">Élèves</div></div></div>
+        <div class="card"><div class="card-icon card-icon-purple">🛡️</div><div class="card-content"><div class="card-value">${ad?.length||0}</div><div class="card-label">Admins</div></div></div>
+      </div>
+      <div class="cards" style="margin-top:16px">
+        <div class="card"><div class="card-icon card-icon-yellow">📚</div><div class="card-content"><div class="card-value">${cl?.length||0}</div><div class="card-label">Classes</div></div></div>
+        <div class="card"><div class="card-icon card-icon-blue">📝</div><div class="card-content"><div class="card-value">${ev?.length||0}</div><div class="card-label">Évaluations</div></div></div>
+        <div class="card"><div class="card-icon card-icon-green">✏️</div><div class="card-content"><div class="card-value">${ac?.length||0}</div><div class="card-label">Activités</div></div></div>
+      </div>`;
+  } catch(e) {}
+}
+
+async function initAdmin() {
+  bindHeader();
+  const s = await sbSession();
+  if (!s) { location.href = "index.html"; return; }
+  const p = await sbProfile();
+  if (!p || p.role !== "admin") {
+    toast("Accès refusé", "Réservé à l'admin", "error");
+    setTimeout(() => location.href = roleHome(p?.role || "teacher"), 700);
+    return;
+  }
+  const who = $("#who"); if (who) who.textContent = p.full_name || p.email || "admin";
+
+  $$(".nav-item[data-view]").forEach(link => {
+    link.addEventListener("click", e => { e.preventDefault(); adminSwitchView(link.dataset.view); });
+  });
+
+  await adminLoadStats();
+  await adminLoadRecent();
+
+  $("#btnSaveEditUser")?.addEventListener("click", async () => {
+    const id        = $("#editUserId").value;
+    const role      = $("#editUserRole").value;
+    const status    = $("#editUserStatus").value;
+    const full_name = $("#editUserName").value.trim();
+    try {
+      await adminUpdateUser(id, { status, role, full_name });
+      $("#modalEditUser").style.display = "none";
+      toast("✅ Sauvegardé", "Modifications enregistrées.", "success");
+      adminLoadUsers(); adminLoadStats();
+    } catch(e) { toast("Erreur", e.message, "error"); }
+  });
+
+  $("#btnCancelEditUser")?.addEventListener("click",  () => { $("#modalEditUser").style.display = "none"; });
+  $("#btnCancelEditUser2")?.addEventListener("click", () => { $("#modalEditUser").style.display = "none"; });
+
+  $("#btnDeleteUser")?.addEventListener("click", () => {
+    const id = $("#editUserId").value;
+    $("#confirmText").textContent = "Supprimer cet utilisateur ? Cette action est irréversible.";
+    $("#modalConfirm").style.display  = "flex";
+    $("#modalEditUser").style.display = "none";
+    $("#btnConfirmAction").onclick = async () => {
+      try {
+        await sb().functions.invoke("admin-update-user", { body: { targetUserId: id, delete: true } });
+        $("#modalConfirm").style.display = "none";
+        toast("🗑 Supprimé", "Utilisateur supprimé.", "success");
+        adminLoadUsers(); adminLoadStats();
+      } catch(e) { toast("Erreur", e.message, "error"); }
+    };
+  });
+
+  $("#btnCancelConfirm")?.addEventListener("click",  () => { $("#modalConfirm").style.display = "none"; });
+  $("#btnCancelConfirm2")?.addEventListener("click", () => { $("#modalConfirm").style.display = "none"; });
 }
