@@ -981,17 +981,18 @@ function setupModalListeners(tid){
 // ADMIN
 // ============================================
 
-async function adminCreateUser(email, password, plan = "free") {
+async function adminCreateUser(email, password, plan = "free", role = "teacher") {
   const { data, error } = await sb().functions.invoke("admin-create-user", {
-    body: { email, password, plan }
+    body: { email, password, plan, role }
   });
   if (error) throw new Error(error.message || "Erreur Edge Function");
   return data;
 }
 
-async function adminUpdateUser(targetUserId, { status, role, full_name } = {}) {
+// 1. Fonction — ajouter le support delete
+async function adminUpdateUser(targetUserId, { status, role, full_name, delete: doDelete } = {}) {
   const { data, error } = await sb().functions.invoke("admin-update-user", {
-    body: { targetUserId, status, role, full_name }
+    body: { targetUserId, status, role, full_name, delete: doDelete }
   });
   if (error) throw new Error(error.message || "Erreur");
   return data;

@@ -267,7 +267,7 @@
       try {
         btn.disabled    = true;
         btn.textContent = "Création…";
-        await adminCreateUser(email, password, plan);
+        await adminCreateUser(email, password, plan, role);
         fermerModalCreation();
         toast("✅ Succès", `Compte créé pour ${email} (plan : ${plan})`);
         if (typeof adminLoadUsers === "function") adminLoadUsers();
