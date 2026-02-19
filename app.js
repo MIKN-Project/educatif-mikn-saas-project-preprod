@@ -58,6 +58,21 @@ async function requireRole(expected){
   const s = await sbSession(); if(!s){ location.href="index.html"; return null; }
   const p = await sbProfile();
 
+  // Si le profil n'existe pas encore (premier login après confirmation mail)
+  if(!p && s?.user){
+    await sb().from("profiles").upsert({
+      id: s.user.id,
+      email: s.user.email,
+      full_name: s.user.user_metadata?.full_name || "",
+      role: "teacher",
+      plan: "free",
+      status: "active"
+    });
+    location.reload(); // recharge pour récupérer le profil
+    return null;
+  }
+
+
   if(!p || p.role !== expected){
     toast("Accès refusé","Rôle requis : "+expected,"error");
     setTimeout(()=>{ const home=roleHome(p?.role); location.href=home||"index.html"; },700);
@@ -213,12 +228,15 @@ function initIndex(){
           role:"teacher", plan:"free", status:"active"
         });
       }
-      toast("✅ Compte créé","Bienvenue ! Connexion en cours…","success");
-      setTimeout(async()=>{
-        const p=await sbProfile().catch(()=>null);
-        const home=roleHome(p?.role||"teacher");
-        if(home) location.href=home;
-      },1200);
+      toast("✅ Compte créé","Un email de confirmation t'a été envoyé. Vérifie ta boîte mail avant de te connecter.","success");
+      // On vide le formulaire sans rediriger
+      document.getElementById("regFullName").value = "";
+      document.getElementById("regEmail").value    = "";
+      document.getElementById("regPassword").value = "";
+      document.getElementById("regPasswordConfirm").value = "";
+      // Retour sur l'onglet connexion après 3s
+      setTimeout(() => switchAuthTab("login"), 3000);
+
     }catch(e){
       toast("Erreur",e?.message||String(e),"error");
     }finally{
