@@ -89,7 +89,6 @@
                 <option value="parent">Parent</option>
                 <option value="student">Élève</option>
               </select>
-              <!-- ✅ Bouton qui ouvre la modal -->
               <button class="btn btn-primary" onclick="ouvrirModalCreation()">
                 ➕ Créer un compte
               </button>
@@ -122,7 +121,7 @@
   </div>
 
   <!-- ══════════════════════════════════════
-       MODAL — Créer un utilisateur ✅
+       MODAL — Créer un utilisateur
   ══════════════════════════════════════ -->
   <div id="modalCreateUser" class="modal" style="display:none">
     <div class="modal-content" style="max-width:440px">
@@ -132,6 +131,10 @@
       </div>
       <div class="modal-body">
         <div class="form-group">
+          <label>Nom complet</label>
+          <input type="text" id="newFullName" class="input" placeholder="Prénom Nom">
+        </div>
+        <div class="form-group">
           <label>Email</label>
           <input type="email" id="newEmail" class="input" placeholder="prof@ecole.fr">
         </div>
@@ -140,7 +143,7 @@
           <input type="password" id="newPassword" class="input" placeholder="Min. 8 caractères">
         </div>
         <div class="form-group">
-          <label>Rôle</label>
+          <label>Rôle <strong style="color:#ef4444">*</strong></label>
           <select id="newRole" class="input">
             <option value="teacher">👩‍🏫 Professeur</option>
             <option value="admin">🛡️ Admin</option>
@@ -149,7 +152,7 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Plan</label>
+          <label>Plan / Licence</label>
           <select id="newPlan" class="input">
             <option value="free">🆓 Free</option>
             <option value="pro">⭐ Pro</option>
@@ -167,18 +170,24 @@
   <!-- ══════════════════════════════════════
        MODAL — Édition utilisateur
   ══════════════════════════════════════ -->
-  <div id="modalEditUser" class="modal">
+  <div id="modalEditUser" class="modal" style="display:none">
     <div class="modal-content" style="max-width:440px">
       <div class="modal-header">
-        <h2>Modifier l'utilisateur</h2>
+        <h2>✏️ Modifier l'utilisateur</h2>
         <button class="modal-close" id="btnCancelEditUser">✕</button>
       </div>
       <div class="modal-body">
         <input type="hidden" id="editUserId">
-        <div class="form-group"><label>Nom complet</label><input type="text" id="editUserName" class="input"></div>
-        <div class="form-group"><label>Email</label><input type="text" id="editUserEmail" class="input" disabled style="opacity:.6"></div>
         <div class="form-group">
-          <label>Rôle</label>
+          <label>Nom complet</label>
+          <input type="text" id="editUserName" class="input" placeholder="Prénom Nom">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="text" id="editUserEmail" class="input" disabled style="opacity:.6">
+        </div>
+        <div class="form-group">
+          <label>Rôle <strong style="color:#ef4444">*</strong></label>
           <select id="editUserRole" class="input">
             <option value="admin">🛡️ Admin</option>
             <option value="teacher">👩‍🏫 Professeur</option>
@@ -194,11 +203,19 @@
             <option value="blocked">🚫 Bloqué</option>
           </select>
         </div>
+        <div class="form-group">
+          <label>Plan / Licence</label>
+          <select id="editUserPlan" class="input">
+            <option value="free">🆓 Free</option>
+            <option value="pro">⭐ Pro</option>
+            <option value="school">🏫 School</option>
+          </select>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn" style="background:#ef4444;margin-right:auto" id="btnDeleteUser">🗑 Supprimer</button>
         <button class="btn btn-secondary" id="btnCancelEditUser2">Annuler</button>
-        <button class="btn" id="btnSaveEditUser">Enregistrer</button>
+        <button class="btn" id="btnSaveEditUser">💾 Enregistrer</button>
       </div>
     </div>
   </div>
@@ -206,10 +223,10 @@
   <!-- ══════════════════════════════════════
        MODAL — Confirmation
   ══════════════════════════════════════ -->
-  <div id="modalConfirm" class="modal">
+  <div id="modalConfirm" class="modal" style="display:none">
     <div class="modal-content" style="max-width:380px">
       <div class="modal-header">
-        <h2>Confirmer</h2>
+        <h2>⚠️ Confirmer</h2>
         <button class="modal-close" id="btnCancelConfirm">✕</button>
       </div>
       <div class="modal-body">
@@ -225,41 +242,42 @@
   <!-- Toast -->
   <div id="toast" class="toast"><strong id="toastTitle"></strong><p id="toastMsg"></p></div>
 
-  <!-- ══════════════════════════════════════
-       SCRIPTS
-  ══════════════════════════════════════ -->
   <script src="app.js"></script>
   <script>
-    // ── Modal création ──────────────────────────────────────
+    // ── Helpers modales ──────────────────────────────────────
     function ouvrirModalCreation() {
+      document.getElementById("newFullName").value = "";
       document.getElementById("newEmail").value    = "";
       document.getElementById("newPassword").value = "";
       document.getElementById("newPlan").value     = "free";
       document.getElementById("newRole").value     = "teacher";
       document.getElementById("modalCreateUser").style.display = "flex";
     }
-
     function fermerModalCreation() {
       document.getElementById("modalCreateUser").style.display = "none";
     }
-
-    // Clic sur le fond sombre pour fermer
     document.getElementById("modalCreateUser").addEventListener("click", (e) => {
       if (e.target === e.currentTarget) fermerModalCreation();
     });
 
-    // ── Créer l'utilisateur ─────────────────────────────────
+    // ── ✅ FIX : role correctement lu depuis le select ───────
     document.getElementById("createUserBtn").addEventListener("click", async () => {
-      const email    = document.getElementById("newEmail").value.trim();
-      const password = document.getElementById("newPassword").value;
-      const plan     = document.getElementById("newPlan").value;
+      const email     = document.getElementById("newEmail").value.trim();
+      const password  = document.getElementById("newPassword").value;
+      const plan      = document.getElementById("newPlan").value;
+      const role      = document.getElementById("newRole").value;      // ✅ FIX — était manquant
+      const full_name = document.getElementById("newFullName").value.trim();
 
       if (!email || !password) {
-        toast("Champs requis", "Email et mot de passe obligatoires.");
+        toast("Champs requis", "Email et mot de passe obligatoires.", "error");
         return;
       }
       if (password.length < 8) {
-        toast("Mot de passe", "Minimum 8 caractères.");
+        toast("Mot de passe", "Minimum 8 caractères.", "error");
+        return;
+      }
+      if (!role) {
+        toast("Rôle requis", "Sélectionne un rôle.", "error");
         return;
       }
 
@@ -267,19 +285,20 @@
       try {
         btn.disabled    = true;
         btn.textContent = "Création…";
-        await adminCreateUser(email, password, plan, role);
+        await adminCreateUser(email, password, plan, role, full_name);
         fermerModalCreation();
-        toast("✅ Succès", `Compte créé pour ${email} (plan : ${plan})`);
+        toast("✅ Compte créé", `${email} — ${role} — plan ${plan}`, "success");
         if (typeof adminLoadUsers === "function") adminLoadUsers();
+        if (typeof adminLoadStats  === "function") adminLoadStats();
       } catch (e) {
-        toast("Erreur", e.message);
+        toast("Erreur", e.message, "error");
       } finally {
         btn.disabled    = false;
         btn.textContent = "Créer le compte";
       }
     });
 
-    // ── Init ────────────────────────────────────────────────
+    // ── Init ─────────────────────────────────────────────────
     document.addEventListener("DOMContentLoaded", () => {
       if (typeof initAdmin === "function") initAdmin();
     });
