@@ -45,18 +45,58 @@ async function sbProfile(){
   return data;
 }
 async function requireRole(expected){
-  const s=await sbSession(); if(!s){location.href="index.html";return null;}
-  const p=await sbProfile();
-  if(!p||p.role!==expected){
+  const s = await sbSession(); if(!s){ location.href="index.html"; return null; }
+  const p = await sbProfile();
+
+  if(!p || p.role !== expected){
     toast("Accès refusé","Rôle requis : "+expected,"error");
     setTimeout(()=>{ const home=roleHome(p?.role); location.href=home||"index.html"; },700);
     return null;
   }
-  const who=$("#who"); if(who) who.textContent=p.full_name||p.email||"";
-  currentPlan=p.plan||"free"; currentPlanData=PLANS[currentPlan]||PLANS.free;
-  const pb=$("#planBadge"); if(pb){pb.textContent=currentPlan.toUpperCase();pb.className="plan-badge plan-"+currentPlan;}
+
+  // 🚫 BLOQUÉ — déconnexion totale, seul un admin peut débloquer
+  if(p.status === "blocked"){
+    await sb().auth.signOut();
+    toast("Compte bloqué","Ton compte a été bloqué. Contacte l'administrateur.","error");
+    setTimeout(()=>location.href="index.html", 2500);
+    return null;
+  }
+
+  // ⏸ SUSPENDU — vérification de la durée
+  if(p.status === "suspended"){
+    const now = new Date();
+    const until = p.suspended_until ? new Date(p.suspended_until) : null;
+
+    if(until && now > until){
+      // ✅ Suspension expirée → on réactive automatiquement en base
+      await sb().from("profiles").update({ status:"active", suspended_until:null }).eq("id", p.id);
+      p.status = "active";
+      p.suspended_until = null;
+      toast("Compte réactivé","Ta suspension est terminée, bienvenue !","success");
+    } else {
+      // Toujours suspendu → forcer le plan Free
+      currentPlan = "free";
+      currentPlanData = PLANS.free;
+      const msg = until
+        ? `Accès limité au plan Free jusqu'au ${until.toLocaleDateString("fr-FR")}.`
+        : "Accès limité au plan Free. Contacte l'administrateur.";
+      toast("Compte suspendu", msg, "error");
+      // On laisse passer mais avec plan Free forcé
+    }
+  }
+
+  // Suite normale si actif ou suspendu (plan Free forcé)
+  if(p.status !== "suspended" || !p.suspended_until || new Date() > new Date(p.suspended_until)){
+    const who=$("#who"); if(who) who.textContent=p.full_name||p.email||"";
+    currentPlan = p.plan||"free";
+    currentPlanData = PLANS[currentPlan]||PLANS.free;
+  }
+
+  const pb=$("#planBadge");
+  if(pb){ pb.textContent=currentPlan.toUpperCase(); pb.className="plan-badge plan-"+currentPlan; }
   return p;
 }
+
 function bindHeader(){
   applyTheme();
   $("#themeBtn")?.addEventListener("click",toggleTheme);
@@ -941,13 +981,14 @@ async function adminCreateUser(email, password, plan = "free", role = "teacher",
   return data;
 }
 
-async function adminUpdateUser(targetUserId, { status, role, full_name, plan } = {}) {
+async function adminUpdateUser(targetUserId, { status, role, full_name, plan, suspended_until } = {}) {
   const { data, error } = await sb().functions.invoke("admin-update-user", {
-    body: { targetUserId, status, role, full_name, plan }
+    body: { targetUserId, status, role, full_name, plan, suspended_until }
   });
   if (error) throw new Error(error.message || "Erreur");
   return data;
 }
+
 
 window.adminSwitchView = function(view) {
   $$(".nav-item").forEach(i => i.classList.toggle("active", i.dataset.view === view));
@@ -1037,6 +1078,10 @@ window.openEditUser = function(id, name, email, role, status, plan) {
   if ($("#editUserRole"))   $("#editUserRole").value   = role   || "teacher";
   if ($("#editUserStatus")) $("#editUserStatus").value = status || "active";
   if ($("#editUserPlan"))   $("#editUserPlan").value   = plan   || "free";
+    // Réinitialise la date de suspension à l'ouverture
+  if ($("#editSuspendedUntil")) $("#editSuspendedUntil").value = "";
+  if ($("#suspendUntilGroup"))  $("#suspendUntilGroup").style.display = status === "suspended" ? "block" : "none";
+
   // Applique la visibilité du plan selon le rôle dès l'ouverture
   if (typeof togglePlanVisibility === "function") togglePlanVisibility("edit");
   $("#modalEditUser").style.display = "flex";
@@ -1126,21 +1171,25 @@ async function initAdmin() {
   await adminLoadRecent();
 
   $("#btnSaveEditUser")?.addEventListener("click", async () => {
-    const id        = $("#editUserId").value;
-    const role      = $("#editUserRole").value;
-    const status    = $("#editUserStatus").value;
-    const full_name = $("#editUserName").value.trim();
-    const hasPlan   = role === "teacher" || role === "admin";
-    const plan      = hasPlan ? ($("#editUserPlan")?.value || "free") : "free";
-    if (!role) { toast("Rôle requis", "Sélectionne un rôle.", "error"); return; }
-    try {
-      await adminUpdateUser(id, { status, role, full_name, plan });
-      $("#modalEditUser").style.display = "none";
-      toast("✅ Sauvegardé", `Rôle : ${role}${hasPlan ? " • Plan : " + plan : ""}`, "success");
-      adminLoadUsers();
-      adminLoadStats();
-    } catch(e) { toast("Erreur", e.message, "error"); }
-  });
+  const id            = $("#editUserId").value;
+  const role          = $("#editUserRole").value;
+  const status        = $("#editUserStatus").value;
+  const full_name     = $("#editUserName").value.trim();
+  const hasPlan       = role === "teacher" || role === "admin";
+  const plan          = hasPlan ? ($("#editUserPlan")?.value || "free") : "free";
+  const suspended_until = status === "suspended"
+    ? ($("#editSuspendedUntil")?.value || null)
+    : null;
+  if (!role) { toast("Rôle requis", "Sélectionne un rôle.", "error"); return; }
+  try {
+    await adminUpdateUser(id, { status, role, full_name, plan, suspended_until });
+    $("#modalEditUser").style.display = "none";
+    toast("✅ Sauvegardé", `Rôle : ${role}${hasPlan ? " • Plan : " + plan : ""}`, "success");
+    adminLoadUsers();
+    adminLoadStats();
+  } catch(e) { toast("Erreur", e.message, "error"); }
+});
+
 
   $("#btnCancelEditUser")?.addEventListener("click",  () => { $("#modalEditUser").style.display = "none"; });
   $("#btnCancelEditUser2")?.addEventListener("click", () => { $("#modalEditUser").style.display = "none"; });
