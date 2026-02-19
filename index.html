@@ -7,25 +7,27 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="login-page">
+<body>
 
-  <div class="login-container">
+  <div class="login-wrapper">
     <div class="login-card">
 
       <!-- Logo -->
-      <div style="text-align:center;margin-bottom:24px">
-        <div style="width:58px;height:58px;background:var(--orange);border-radius:16px;display:inline-flex;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#fff;margin-bottom:10px">M</div>
+      <div style="text-align:center;margin-bottom:28px">
+        <div class="login-logo-icon" style="width:56px;height:56px;border-radius:16px;font-size:24px;font-weight:900;margin:0 auto 12px">M</div>
         <h1 style="font-size:22px;font-weight:800;margin:0">Educatif MIKN</h1>
         <p style="color:var(--text-muted);font-size:13px;margin-top:4px">Plateforme éducative intelligente</p>
       </div>
 
-      <!-- Tabs auth -->
-      <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:22px">
+      <!-- Onglets Connexion / Inscription -->
+      <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:24px">
         <button id="tabLogin" onclick="switchAuthTab('login')"
-          style="flex:1;padding:10px 6px;background:none;border:none;border-bottom:3px solid var(--orange);margin-bottom:-2px;font-size:14px;font-weight:700;cursor:pointer;color:var(--text)">
+          class="auth-tab active"
+          style="flex:1;padding:10px 6px;background:none;border:none;border-bottom:3px solid var(--orange);margin-bottom:-2px;font-size:14px;font-weight:700;cursor:pointer;color:var(--text-main)">
           🔐 Se connecter
         </button>
         <button id="tabRegister" onclick="switchAuthTab('register')"
+          class="auth-tab"
           style="flex:1;padding:10px 6px;background:none;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;font-size:14px;font-weight:600;cursor:pointer;color:var(--text-muted)">
           ✨ Créer un compte
         </button>
@@ -33,20 +35,13 @@
 
       <!-- ═══ CONNEXION ═══ -->
       <div id="sectionLogin">
-        <div style="display:flex;gap:6px;margin-bottom:18px">
-          <button data-role="teacher" class="role-tab active"
-            style="flex:1;padding:8px 4px;border-radius:8px;border:2px solid var(--orange);background:var(--bg-card);font-size:12px;cursor:pointer;font-weight:700">
-            👩‍🏫 Professeur
-          </button>
-          <button data-role="parent" class="role-tab"
-            style="flex:1;padding:8px 4px;border-radius:8px;border:2px solid var(--border);background:var(--bg-card);font-size:12px;cursor:pointer;font-weight:600">
-            👨‍👩‍👧 Parent
-          </button>
-          <button data-role="admin" class="role-tab"
-            style="flex:1;padding:8px 4px;border-radius:8px;border:2px solid var(--border);background:var(--bg-card);font-size:12px;cursor:pointer;font-weight:600">
-            🛡️ Admin
-          </button>
+
+        <!-- Rôles — Admin retiré de la page d'accueil -->
+        <div class="role-tabs">
+          <button data-role="teacher">👩‍🏫 Professeur</button>
+          <button data-role="parent">👨‍👩‍👧 Parent</button>
         </div>
+
         <div class="form-group">
           <label>Email</label>
           <input type="email" id="email" class="input" placeholder="ton@email.fr" autocomplete="email">
@@ -55,23 +50,16 @@
           <label>Mot de passe</label>
           <input type="password" id="password" class="input" placeholder="••••••••" autocomplete="current-password">
         </div>
-        <button id="loginBtn" class="btn" style="width:100%;margin-top:8px">Connexion →</button>
-        <button id="forgotBtn" class="btn btn-secondary" style="width:100%;margin-top:8px;font-size:13px">Mot de passe oublié ?</button>
+
+        <button id="loginBtn" class="btn" style="width:100%;margin-top:4px">Connexion →</button>
+        <button id="forgotBtn" class="btn btn-secondary" style="width:100%;margin-top:10px;font-size:13px">
+          Mot de passe oublié ?
+        </button>
+
       </div>
 
       <!-- ═══ INSCRIPTION ═══ -->
       <div id="sectionRegister" style="display:none">
-
-        <!-- Badge plan Free -->
-        <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;border-radius:12px;padding:14px 16px;margin-bottom:20px;text-align:center">
-          <div style="font-size:24px;margin-bottom:4px">🆓</div>
-          <div style="font-weight:800;font-size:14px;color:#15803d">Plan Free — Toujours gratuit</div>
-          <div style="font-size:12px;color:#166534;margin-top:6px;line-height:1.6">
-            ✅ 2 classes &nbsp;•&nbsp; ✅ 20 élèves max<br>
-            ✅ 10 évaluations &nbsp;•&nbsp; ✅ 5 activités<br>
-            ✅ Quiz inclus &nbsp;•&nbsp; ❌ Plan de salle (Pro)
-          </div>
-        </div>
 
         <div class="form-group">
           <label>Nom complet</label>
@@ -82,26 +70,30 @@
           <input type="email" id="regEmail" class="input" placeholder="ton@email.fr" autocomplete="email">
         </div>
         <div class="form-group">
-          <label>Mot de passe <span style="color:var(--text-muted);font-size:11px">(min. 8 caractères)</span></label>
+          <label>Mot de passe <span style="color:var(--text-muted);font-size:11px;font-weight:400">(min. 8 caractères)</span></label>
           <input type="password" id="regPassword" class="input" placeholder="••••••••">
         </div>
         <div class="form-group">
           <label>Confirmer le mot de passe</label>
           <input type="password" id="regPasswordConfirm" class="input" placeholder="••••••••">
         </div>
-        <button id="registerBtn" class="btn" style="width:100%;margin-top:8px">
+
+        <button id="registerBtn" class="btn" style="width:100%;margin-top:4px">
           Créer mon compte gratuit →
         </button>
-        <p style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:14px;line-height:1.6">
-          En créant un compte, tu acceptes les conditions d'utilisation.<br>
-          Passage au plan <strong>Pro</strong> possible à tout moment depuis l'application.
+
+        <p style="font-size:12px;color:var(--text-muted);text-align:center;margin-top:14px;line-height:1.7">
+          🆓 Compte <strong>Free</strong> — 2 classes · 20 élèves · Quiz inclus<br>
+          <span style="font-size:11px">Upgrade possible depuis l'application à tout moment.</span>
         </p>
+
       </div>
 
     </div>
 
+    <!-- Bouton thème en dehors de la card -->
     <div style="text-align:center;margin-top:16px">
-      <button id="themeBtn" class="btn-icon" style="font-size:20px">🌙</button>
+      <button id="themeBtn" class="btn-icon">🌙</button>
     </div>
   </div>
 
@@ -119,11 +111,11 @@
       document.getElementById("sectionRegister").style.display = isLogin ? "none"  : "block";
       const tL = document.getElementById("tabLogin");
       const tR = document.getElementById("tabRegister");
-      tL.style.borderBottomColor = isLogin ? "var(--orange)" : "transparent";
-      tL.style.color             = isLogin ? "var(--text)"   : "var(--text-muted)";
+      tL.style.borderBottomColor = isLogin ? "var(--orange)"    : "transparent";
+      tL.style.color             = isLogin ? "var(--text-main)" : "var(--text-muted)";
       tL.style.fontWeight        = isLogin ? "700" : "600";
-      tR.style.borderBottomColor = isLogin ? "transparent"   : "var(--orange)";
-      tR.style.color             = isLogin ? "var(--text-muted)" : "var(--text)";
+      tR.style.borderBottomColor = isLogin ? "transparent"      : "var(--orange)";
+      tR.style.color             = isLogin ? "var(--text-muted)": "var(--text-main)";
       tR.style.fontWeight        = isLogin ? "600" : "700";
     }
   </script>
