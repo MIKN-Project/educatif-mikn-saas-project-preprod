@@ -930,10 +930,9 @@ function setupModalListeners(tid){
 }
 
 // ============================================
-// ADMIN — v9 (roles + plan complets)
+// ADMIN — v9 (roles + plan profs/admins only)
 // ============================================
 
-// ✅ full_name ajouté
 async function adminCreateUser(email, password, plan = "free", role = "teacher", full_name = "") {
   const { data, error } = await sb().functions.invoke("admin-create-user", {
     body: { email, password, plan, role, full_name }
@@ -942,7 +941,6 @@ async function adminCreateUser(email, password, plan = "free", role = "teacher",
   return data;
 }
 
-// ✅ plan ajouté
 async function adminUpdateUser(targetUserId, { status, role, full_name, plan } = {}) {
   const { data, error } = await sb().functions.invoke("admin-update-user", {
     body: { targetUserId, status, role, full_name, plan }
@@ -954,7 +952,7 @@ async function adminUpdateUser(targetUserId, { status, role, full_name, plan } =
 window.adminSwitchView = function(view) {
   $$(".nav-item").forEach(i => i.classList.toggle("active", i.dataset.view === view));
   $$(".view").forEach(v => v.classList.toggle("active", v.id === "view-" + view));
-  const t = { dashboard:"Tableau de bord", users:"Utilisateurs", licences:"Licences & plans", stats:"Statistiques" };
+  const t = { dashboard:"Tableau de bord", users:"Utilisateurs", licences:"Licences & plans — Professeurs", stats:"Statistiques" };
   if ($("#pageTitle")) $("#pageTitle").textContent = t[view] || view;
   if (view === "users")    adminLoadUsers();
   if (view === "licences") adminLoadLicences();
@@ -981,7 +979,7 @@ async function adminLoadStats() {
 async function adminLoadRecent() {
   try {
     const { data } = await sb().from("profiles")
-      .select("id,email,role,full_name,status,plan,created_at")  // ✅ plan inclus
+      .select("id,email,role,full_name,status,plan,created_at")
       .order("created_at", { ascending: false }).limit(8);
     const container = $("#adminRecentList"); if (!container) return;
     container.innerHTML = data?.length ? renderUserList(data, false) : '<p class="panel-empty">Aucun utilisateur.</p>';
@@ -992,7 +990,6 @@ async function adminLoadUsers() {
   const q  = ($("#adminSearch")?.value  || "").trim().toLowerCase();
   const rf = ($("#adminRoleFilter")?.value || "");
   try {
-    // ✅ plan inclus dans la requête
     let query = sb().from("profiles")
       .select("id,email,role,full_name,status,plan,created_at")
       .order("created_at", { ascending: false });
@@ -1011,6 +1008,7 @@ function renderUserList(data, showEdit) {
   const rc = { admin:"#7c3aed", teacher:"#1d4ed8", parent:"#15803d", student:"#b45309" };
   const rl = { admin:"🛡️ Admin", teacher:"👩‍🏫 Prof", parent:"👨‍👩‍👧 Parent", student:"🎒 Élève" };
   const pl = { free:"🆓 Free", pro:"⭐ Pro", school:"🏫 School" };
+  const hasPlanRole = r => r === "teacher" || r === "admin";
   const sb_map = {
     active:    "<span style='color:#22c55e;font-weight:700'>✅ Actif</span>",
     suspended: "<span style='color:#f59e0b;font-weight:700'>⏸ Suspendu</span>",
@@ -1023,7 +1021,7 @@ function renderUserList(data, showEdit) {
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span style="background:${rc[u.role]||"#6b7280"};color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700">${rl[u.role]||u.role}</span>
-      <span style="background:var(--bg-main);border:1px solid var(--border);border-radius:999px;padding:2px 10px;font-size:12px">${pl[u.plan||"free"]||u.plan||"free"}</span>
+      ${hasPlanRole(u.role) ? `<span style="background:var(--bg-main);border:1px solid var(--border);border-radius:999px;padding:2px 10px;font-size:12px">${pl[u.plan||"free"]||u.plan}</span>` : ""}
       ${sb_map[u.status||"active"] || sb_map.active}
       ${showEdit ? `<button class="btn btn-secondary" style="font-size:13px"
         onclick="openEditUser('${u.id}','${(u.full_name||"").replace(/'/g,"\\'")}','${u.email||""}','${u.role}','${u.status||"active"}','${u.plan||"free"}')">✏️ Gérer</button>` : ""}
@@ -1031,27 +1029,28 @@ function renderUserList(data, showEdit) {
   </div>`).join("");
 }
 
-// ✅ plan ajouté comme 6e paramètre
 window.openEditUser = function(id, name, email, role, status, plan) {
   if ($("#editUserId"))     $("#editUserId").value     = id;
   if ($("#editUserName"))   $("#editUserName").value   = name;
   if ($("#editUserEmail"))  $("#editUserEmail").value  = email;
   if ($("#editUserRole"))   $("#editUserRole").value   = role   || "teacher";
   if ($("#editUserStatus")) $("#editUserStatus").value = status || "active";
-  if ($("#editUserPlan"))   $("#editUserPlan").value   = plan   || "free";  // ✅
+  if ($("#editUserPlan"))   $("#editUserPlan").value   = plan   || "free";
+  // Applique la visibilité du plan selon le rôle dès l'ouverture
+  if (typeof togglePlanVisibility === "function") togglePlanVisibility("edit");
   $("#modalEditUser").style.display = "flex";
 };
 
 async function adminLoadLicences() {
   try {
     const { data } = await sb().from("profiles")
-      .select("id,email,full_name,plan,plan_status,role,status")
+      .select("id,email,full_name,plan,plan_status,status")
       .eq("role","teacher").order("email");
     const container = $("#adminLicencesList"); if (!container) return;
     container.innerHTML = (data||[]).length
       ? data.map(u => `<div class="list-item">
           <div>
-            <div style="font-weight:700">${u.full_name||u.email}</div>
+            <div style="font-weight:700">${u.full_name||"(Sans nom)"}</div>
             <div style="font-size:13px;color:var(--text-muted)">${u.email}</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
@@ -1061,12 +1060,12 @@ async function adminLoadLicences() {
               <option value="school" ${u.plan==="school" ? "selected":""}>🏫 School</option>
             </select>
             <span class="badge-blue">${u.plan_status||"trial"}</span>
-            <span style="font-size:12px;color:${u.status==="active"?"#22c55e":u.status==="suspended"?"#f59e0b":"#ef4444"};font-weight:700">
-              ${u.status==="active"?"✅":u.status==="suspended"?"⏸":"🚫"} ${u.status||"active"}
+            <span style="font-size:12px;font-weight:700;color:${u.status==="active"?"#22c55e":u.status==="suspended"?"#f59e0b":"#ef4444"}">
+              ${u.status==="active"?"✅ Actif":u.status==="suspended"?"⏸ Suspendu":"🚫 Bloqué"}
             </span>
           </div>
         </div>`).join("")
-      : '<p class="panel-empty">Aucun professeur.</p>';
+      : '<p class="panel-empty">Aucun professeur enregistré.</p>';
   } catch(e) {}
 }
 window.adminUpdatePlan = async function(uid, plan) {
@@ -1122,18 +1121,18 @@ async function initAdmin() {
   await adminLoadStats();
   await adminLoadRecent();
 
-  // ✅ Sauvegarde utilisateur avec plan inclus
   $("#btnSaveEditUser")?.addEventListener("click", async () => {
     const id        = $("#editUserId").value;
     const role      = $("#editUserRole").value;
     const status    = $("#editUserStatus").value;
     const full_name = $("#editUserName").value.trim();
-    const plan      = $("#editUserPlan")?.value || "free";  // ✅
+    const hasPlan   = role === "teacher" || role === "admin";
+    const plan      = hasPlan ? ($("#editUserPlan")?.value || "free") : "free";
     if (!role) { toast("Rôle requis", "Sélectionne un rôle.", "error"); return; }
     try {
       await adminUpdateUser(id, { status, role, full_name, plan });
       $("#modalEditUser").style.display = "none";
-      toast("✅ Sauvegardé", `Rôle : ${role} • Plan : ${plan}`, "success");
+      toast("✅ Sauvegardé", `Rôle : ${role}${hasPlan ? " • Plan : " + plan : ""}`, "success");
       adminLoadUsers();
       adminLoadStats();
     } catch(e) { toast("Erreur", e.message, "error"); }
@@ -1142,7 +1141,6 @@ async function initAdmin() {
   $("#btnCancelEditUser")?.addEventListener("click",  () => { $("#modalEditUser").style.display = "none"; });
   $("#btnCancelEditUser2")?.addEventListener("click", () => { $("#modalEditUser").style.display = "none"; });
 
-  // ✅ Suppression utilisateur
   $("#btnDeleteUser")?.addEventListener("click", () => {
     const id   = $("#editUserId").value;
     const name = $("#editUserName").value || "cet utilisateur";
