@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="fr" data-theme="light">
+<html lang="fr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MaClasseVue — Espace Prof</title>
+  <title>Professeur - Educatif MIKN</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -12,11 +12,17 @@
   <header class="header">
     <div class="header-title">
       <h1 id="pageTitle">Tableau de bord</h1>
-      <p id="pageSubtitle">Vue rapide</p>
+      <p id="pageSubtitle">Vue rapide sur ta classe</p>
     </div>
     <div class="header-actions">
-      <span id="planBadge" class="plan-badge plan-free">FREE</span>
       <span id="who" class="header-user"></span>
+      <!-- Badge plan + bouton upgrade -->
+      <span id="planBadge" class="plan-badge plan-free" onclick="showPlanModal()"
+        style="cursor:pointer" title="Voir mon abonnement">FREE</span>
+      <button onclick="showPlanModal()" class="btn btn-secondary"
+        style="font-size:12px;padding:5px 12px;background:linear-gradient(135deg,#f97316,#fb923c);color:#fff;border:none">
+        ⭐ Upgrade
+      </button>
       <button id="themeBtn" class="btn-icon">🌙</button>
       <button id="logoutBtn" class="btn btn-secondary">Déconnexion</button>
     </div>
@@ -27,179 +33,248 @@
       <div class="sidebar-header">
         <div class="logo">M</div>
         <div>
-          <div class="sidebar-title">MaClasseVue</div>
-          <div class="sidebar-subtitle">Espace Prof</div>
+          <div class="sidebar-title">Educatif MIKN</div>
+          <div class="sidebar-subtitle">Espace Professeur</div>
         </div>
       </div>
       <nav class="sidebar-nav">
         <div class="nav-section">PRINCIPAL</div>
         <a href="#" class="nav-item active" data-view="dashboard"><span class="nav-icon">📊</span> Tableau de bord</a>
-        <a href="#" class="nav-item" data-view="classes"><span class="nav-icon">📚</span> Mes classes</a>
+        <a href="#" class="nav-item" data-view="classes"><span class="nav-icon">📚</span> Classes</a>
         <a href="#" class="nav-item" data-view="eleves"><span class="nav-icon">👥</span> Élèves</a>
-        <a href="#" class="nav-item" data-view="evaluations"><span class="nav-icon">📝</span> Évaluations & Quiz</a>
+        <a href="#" class="nav-item" data-view="plan"><span class="nav-icon">🏠</span> Plan de classe</a>
+        <div class="nav-section">PÉDAGOGIE</div>
+        <a href="#" class="nav-item" data-view="evaluations"><span class="nav-icon">📝</span> Évaluations</a>
         <a href="#" class="nav-item" data-view="activites"><span class="nav-icon">✏️</span> Activités</a>
-        <div class="nav-section">CLASSE</div>
-        <a href="#" class="nav-item" data-view="plan">
-          <span class="nav-icon">🏛️</span> Plan de salle
-          <span style="font-size:10px;margin-left:auto;opacity:.6">🔒</span>
-        </a>
+        <div class="nav-section">COMMUNICATION</div>
         <a href="#" class="nav-item" data-view="parents"><span class="nav-icon">👨‍👩‍👧</span> Parents</a>
-        <a href="#" class="nav-item" data-view="messages">
-          <span class="nav-icon">💬</span> Messages
-          <span id="msgBadge" class="badge" style="display:none;margin-left:auto">0</span>
+        <a href="#" class="nav-item" data-view="messages"><span class="nav-icon">💬</span> Messages<span class="nav-badge" id="msgBadge" style="display:none"></span></a>
+        <!-- Abonnement dans sidebar -->
+        <div class="nav-section" style="margin-top:auto">MON COMPTE</div>
+        <a href="#" class="nav-item" onclick="event.preventDefault();showPlanModal()">
+          <span class="nav-icon">🔑</span> Mon abonnement
         </a>
       </nav>
     </aside>
 
     <main class="main-content">
 
-      <!-- ===== DASHBOARD ===== -->
+      <!-- DASHBOARD -->
       <div id="view-dashboard" class="view active">
-        <!-- Raccourcis rapides -->
-        <div class="panel" style="margin-bottom:20px">
-          <div class="panel-header" style="margin-bottom:12px">
-            <h2>Accès rapide</h2>
-          </div>
-          <div id="dashShortcuts" style="display:flex;gap:10px;flex-wrap:wrap"></div>
-        </div>
-        <!-- Stats -->
         <div class="cards">
-          <div class="card">
-            <div class="card-icon card-icon-blue">📚</div>
-            <div class="card-content"><div class="card-value" id="stat-classes">0</div><div class="card-label">Classes</div></div>
-          </div>
-          <div class="card">
-            <div class="card-icon card-icon-green">👥</div>
-            <div class="card-content"><div class="card-value" id="stat-eleves">0</div><div class="card-label">Élèves</div></div>
-          </div>
-          <div class="card">
-            <div class="card-icon card-icon-yellow">✏️</div>
-            <div class="card-content"><div class="card-value" id="stat-activites">0</div><div class="card-label">Activités</div></div>
-          </div>
+          <div class="card"><div class="card-icon card-icon-yellow">📚</div><div class="card-content"><div class="card-value" id="stat-classes">0</div><div class="card-label">Classes</div></div></div>
+          <div class="card"><div class="card-icon card-icon-blue">👥</div><div class="card-content"><div class="card-value" id="stat-eleves">0</div><div class="card-label">Élèves</div></div></div>
+          <div class="card"><div class="card-icon card-icon-green">✏️</div><div class="card-content"><div class="card-value" id="stat-activites">0</div><div class="card-label">Activités</div></div></div>
         </div>
-        <!-- Dernières évals -->
-        <div class="panel" style="margin-top:20px">
-          <div class="panel-header">
-            <h2>Dernières évaluations</h2>
-            <button class="btn" id="btnAddEvalDash">+ Créer une évaluation</button>
+
+        <!-- Bannière plan Free si applicable -->
+        <div id="freeBanner" style="display:none;background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1.5px solid #fed7aa;border-radius:14px;padding:14px 18px;margin:16px 0;display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <div style="font-weight:700;font-size:14px;color:#c2410c">🆓 Tu es sur le plan Free</div>
+            <div style="font-size:12px;color:#9a3412;margin-top:3px">2 classes • 20 élèves • 10 évals • 5 activités — Passe en Pro pour tout débloquer !</div>
           </div>
-          <table class="table">
-            <thead><tr><th>Titre</th><th>Matière</th><th>Type / Barème</th><th>Date</th></tr></thead>
-            <tbody id="recentEvaluations"><tr><td colspan="4" class="table-empty">Chargement…</td></tr></tbody>
-          </table>
+          <button onclick="showPlanModal()" class="btn" style="background:#f97316;white-space:nowrap;font-size:13px">⭐ Voir les offres</button>
+        </div>
+
+        <div class="dashboard-grid">
+          <div class="panel">
+            <div class="panel-header"><h2>Dernières évaluations</h2><button class="btn" onclick="switchToView('evaluations')">Voir tout</button></div>
+            <table class="table"><thead><tr><th>Évaluation</th><th>Matière</th><th>Barème</th><th>Date</th></tr></thead>
+            <tbody id="recentEvaluations"><tr><td colspan="4" class="table-empty">Aucune évaluation</td></tr></tbody></table>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><h2>Actions rapides</h2></div>
+            <div class="quick-actions">
+              <button class="action-btn" id="btnAddEleve"><span class="action-icon">👥</span> Ajouter un élève</button>
+              <button class="action-btn" id="btnAddClass"><span class="action-icon">📚</span> Créer une classe</button>
+              <button class="action-btn" id="btnAddEvalDash"><span class="action-icon">📝</span> Nouvelle évaluation</button>
+              <button class="action-btn" onclick="switchToView('plan')"><span class="action-icon">🏠</span> Plan de classe</button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- ===== CLASSES ===== -->
+      <!-- CLASSES -->
       <div id="view-classes" class="view">
         <div class="panel">
-          <div class="panel-header">
-            <h2>Mes classes</h2>
-            <button class="btn" id="btnAddClass">+ Créer une classe</button>
-          </div>
-          <div id="classesList"><p class="panel-empty">Chargement…</p></div>
+          <div class="panel-header"><h2>Mes classes</h2><button class="btn" id="btnAddClass2">+ Créer une classe</button></div>
+          <div id="classesList"><p class="panel-empty">Aucune classe créée.</p></div>
         </div>
       </div>
 
-      <!-- ===== ÉLÈVES ===== -->
+      <!-- ÉLÈVES -->
       <div id="view-eleves" class="view">
         <div class="panel">
           <div class="panel-header">
-            <h2>Élèves</h2>
+            <h2>Mes élèves</h2>
             <div class="panel-actions">
-              <select id="filterClass" class="input" style="width:200px">
-                <option value="">Toutes les classes</option>
-              </select>
-              <button class="btn" id="btnAddEleve">+ Ajouter un élève</button>
+              <select id="filterClass" class="input" style="width:200px"><option value="">Toutes les classes</option></select>
+              <button class="btn" id="btnAddEleve2">+ Ajouter un élève</button>
             </div>
           </div>
-          <div id="elevesList"><p class="panel-empty">Chargement…</p></div>
+          <div id="elevesList"><p class="panel-empty">Aucun élève enregistré.</p></div>
         </div>
       </div>
 
-      <!-- ===== ÉVALUATIONS ===== -->
-      <div id="view-evaluations" class="view">
-        <div class="panel">
-          <div class="panel-header">
-            <h2>Évaluations & Quiz</h2>
-            <button class="btn" id="btnAddEval">+ Créer</button>
-          </div>
-          <div id="evalsList"><p class="panel-empty">Chargement…</p></div>
-        </div>
-      </div>
-
-      <!-- ===== ACTIVITÉS ===== -->
-      <div id="view-activites" class="view">
-        <div class="panel">
-          <div class="panel-header">
-            <h2>Activités</h2>
-            <button class="btn" id="btnAddActivite">+ Créer une activité</button>
-          </div>
-          <div id="activitesList"><p class="panel-empty">Chargement…</p></div>
-        </div>
-      </div>
-
-      <!-- ===== PLAN DE SALLE ===== -->
+      <!-- PLAN DE SALLE -->
       <div id="view-plan" class="view">
         <div class="panel">
-          <div class="panel-header">
-            <h2>Plan de salle</h2>
-            <select id="planClassSelect" class="input" style="width:200px">
-              <option value="">Sélectionner une classe</option>
-            </select>
+          <div class="panel-header"><h2>Plan de classe</h2>
+            <select id="planClassSelect" class="input" style="width:240px"><option value="">Sélectionner une classe</option></select>
           </div>
-          <div id="planContainer"><p class="panel-empty">Sélectionnez une classe pour afficher le plan.</p></div>
+          <div id="planContainer" style="text-align:center;color:var(--text-muted);padding:60px;font-size:14px">Sélectionnez une classe.</div>
         </div>
       </div>
 
-      <!-- ===== PARENTS ===== -->
+      <!-- ÉVALUATIONS -->
+      <div id="view-evaluations" class="view">
+        <div class="panel">
+          <div class="panel-header"><h2>Évaluations & Quiz</h2><button class="btn" id="btnAddEval">+ Créer</button></div>
+          <div id="evalsList"><p class="panel-empty">Aucune évaluation créée.</p></div>
+        </div>
+      </div>
+
+      <!-- ACTIVITÉS -->
+      <div id="view-activites" class="view">
+        <div class="panel">
+          <div class="panel-header"><h2>Activités</h2><button class="btn" id="btnAddActivite">+ Créer</button></div>
+          <div id="activitesList"><p class="panel-empty">Aucune activité créée.</p></div>
+        </div>
+      </div>
+
+      <!-- PARENTS -->
       <div id="view-parents" class="view">
-        <div class="panel">
-          <div class="panel-header"><h2>Parents</h2></div>
-          <p class="panel-empty">Fonctionnalité à venir.</p>
-        </div>
+        <div class="panel"><div class="panel-header"><h2>Parents</h2></div><p class="panel-empty">Gestion des parents en développement…</p></div>
       </div>
 
-      <!-- ===== MESSAGES ===== -->
+      <!-- MESSAGES -->
       <div id="view-messages" class="view">
-        <div class="panel">
-          <div class="panel-header"><h2>Messages</h2></div>
-          <p class="panel-empty">Fonctionnalité à venir.</p>
-        </div>
+        <div class="panel"><div class="panel-header"><h2>Messages</h2></div><p class="panel-empty">Messagerie en développement…</p></div>
       </div>
 
     </main>
   </div>
 
+  <!-- ═══════════════════════════════════
+       MODAL — Mon abonnement / Plans
+  ═══════════════════════════════════ -->
+  <div id="modalPlan" class="modal">
+    <div class="modal-content" style="max-width:660px">
+      <div class="modal-header">
+        <h2>🔑 Mon abonnement</h2>
+        <button class="modal-close" onclick="document.getElementById('modalPlan').classList.remove('show')">✕</button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Plan actuel -->
+        <div id="currentPlanInfo" style="background:var(--bg-main);border:1.5px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:12px">
+          <div style="font-size:32px" id="planModalIcon">🆓</div>
+          <div>
+            <div style="font-weight:800;font-size:16px" id="planModalName">Plan Free</div>
+            <div style="font-size:13px;color:var(--text-muted)">Ton plan actuel</div>
+          </div>
+        </div>
+
+        <!-- Comparatif -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+
+          <!-- FREE -->
+          <div id="card-free" class="plan-card" style="border-radius:14px;padding:18px;border:2px solid #86efac;background:#f0fdf4">
+            <div style="text-align:center;margin-bottom:14px">
+              <div style="font-size:28px">🆓</div>
+              <div style="font-weight:800;font-size:16px;color:#15803d">Free</div>
+              <div style="font-size:20px;font-weight:900;color:#15803d;margin-top:4px">0 €</div>
+              <div style="font-size:11px;color:#166534">/ toujours gratuit</div>
+            </div>
+            <ul style="list-style:none;padding:0;margin:0;font-size:13px;line-height:2;color:#166534">
+              <li>✅ 2 classes</li>
+              <li>✅ 20 élèves</li>
+              <li>✅ 10 évaluations</li>
+              <li>✅ 5 activités</li>
+              <li>✅ Quiz (5 questions max)</li>
+              <li>❌ Plan de salle</li>
+              <li>❌ Espace parents</li>
+            </ul>
+          </div>
+
+          <!-- PRO -->
+          <div id="card-pro" style="border-radius:14px;padding:18px;border:2px solid #f97316;background:linear-gradient(135deg,#fff7ed,#ffedd5);position:relative">
+            <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:#f97316;color:#fff;border-radius:999px;padding:2px 12px;font-size:11px;font-weight:700;white-space:nowrap">⭐ RECOMMANDÉ</div>
+            <div style="text-align:center;margin-bottom:14px">
+              <div style="font-size:28px">⭐</div>
+              <div style="font-weight:800;font-size:16px;color:#c2410c">Pro</div>
+              <div style="font-size:20px;font-weight:900;color:#c2410c;margin-top:4px" id="proPrix">— €</div>
+              <div style="font-size:11px;color:#9a3412">/ mois — bientôt disponible</div>
+            </div>
+            <ul style="list-style:none;padding:0;margin:0;font-size:13px;line-height:2;color:#9a3412">
+              <li>✅ 15 classes</li>
+              <li>✅ 200 élèves</li>
+              <li>✅ Évaluations illimitées</li>
+              <li>✅ Activités illimitées</li>
+              <li>✅ Quiz illimités</li>
+              <li>✅ Plan de salle</li>
+              <li>✅ Espace parents</li>
+            </ul>
+            <button onclick="document.getElementById('modalPlan').classList.remove('show')" class="btn"
+              style="width:100%;margin-top:14px;background:#f97316;font-size:13px">
+              Contacter pour upgrade →
+            </button>
+          </div>
+
+          <!-- SCHOOL -->
+          <div id="card-school" style="border-radius:14px;padding:18px;border:2px solid #7c3aed;background:linear-gradient(135deg,#faf5ff,#ede9fe)">
+            <div style="text-align:center;margin-bottom:14px">
+              <div style="font-size:28px">🏫</div>
+              <div style="font-weight:800;font-size:16px;color:#6d28d9">School</div>
+              <div style="font-size:20px;font-weight:900;color:#6d28d9;margin-top:4px">— €</div>
+              <div style="font-size:11px;color:#5b21b6">/ établissement — bientôt</div>
+            </div>
+            <ul style="list-style:none;padding:0;margin:0;font-size:13px;line-height:2;color:#5b21b6">
+              <li>✅ Classes illimitées</li>
+              <li>✅ Élèves illimités</li>
+              <li>✅ Tout Pro inclus</li>
+              <li>✅ Multi-profs</li>
+              <li>✅ Statistiques école</li>
+              <li>✅ Support prioritaire</li>
+              <li>✅ Personnalisation</li>
+            </ul>
+            <button onclick="document.getElementById('modalPlan').classList.remove('show')" class="btn"
+              style="width:100%;margin-top:14px;background:#7c3aed;font-size:13px">
+              Nous contacter →
+            </button>
+          </div>
+
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('modalPlan').classList.remove('show')">Fermer</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== MODAL CLASSE ===== -->
   <div id="modalClass" class="modal">
-    <div class="modal-content" style="max-width:420px">
+    <div class="modal-content">
       <div class="modal-header"><h2 id="modalClassTitle">Créer une classe</h2><button class="modal-close" id="btnCancelClass">✕</button></div>
       <div class="modal-body">
         <input type="hidden" id="classId">
-        <div class="form-group"><label>Nom *</label><input type="text" id="className" class="input" placeholder="Ex : CM2-A"></div>
+        <div class="form-group"><label>Nom de la classe *</label><input type="text" id="className" class="input" placeholder="Ex : CM2 A"></div>
         <div class="form-group"><label>Année scolaire</label><input type="text" id="classYear" class="input" value="2025-2026"></div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="btnCancelClass2">Annuler</button>
-        <button class="btn" id="btnSaveClass">Enregistrer</button>
-      </div>
+      <div class="modal-footer"><button class="btn btn-secondary" id="btnCancelClass2">Annuler</button><button class="btn" id="btnSaveClass">Enregistrer</button></div>
     </div>
   </div>
 
   <!-- ===== MODAL ÉLÈVE ===== -->
   <div id="modalEleve" class="modal">
-    <div class="modal-content" style="max-width:420px">
+    <div class="modal-content">
       <div class="modal-header"><h2>Ajouter un élève</h2><button class="modal-close" id="btnCancelEleve">✕</button></div>
       <div class="modal-body">
-        <div class="form-group"><label>Prénom *</label><input type="text" id="eleveFirstName" class="input"></div>
-        <div class="form-group"><label>Nom *</label><input type="text" id="eleveLastName" class="input"></div>
-        <div class="form-group"><label>Classe</label><select id="eleveClassId" class="input"><option value="">Aucune</option></select></div>
+        <div class="form-group"><label>Prénom *</label><input type="text" id="eleveFirstName" class="input" placeholder="Prénom"></div>
+        <div class="form-group"><label>Nom *</label><input type="text" id="eleveLastName" class="input" placeholder="Nom"></div>
+        <div class="form-group"><label>Classe</label><select id="eleveClassId" class="input"><option value="">Aucune classe</option></select></div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="btnCancelEleve2">Annuler</button>
-        <button class="btn" id="btnSaveEleve">Ajouter</button>
-      </div>
+      <div class="modal-footer"><button class="btn btn-secondary" id="btnCancelEleve2">Annuler</button><button class="btn" id="btnSaveEleve">Ajouter</button></div>
     </div>
   </div>
 
@@ -208,120 +283,134 @@
     <div class="modal-content" style="max-width:680px">
       <div class="modal-header">
         <div>
-          <h2 id="ficheEleveName">Élève</h2>
-          <p id="ficheEleveClass" style="font-size:13px;color:var(--text-muted);margin:0"></p>
+          <h2 id="ficheEleveName">Fiche élève</h2>
+          <p id="ficheEleveClass" style="font-size:13px;color:var(--text-muted);margin-top:2px"></p>
         </div>
         <button class="modal-close" id="btnCloseFiche">✕</button>
       </div>
-      <input type="hidden" id="ficheEleveId">
-      <div class="template-tabs" style="padding:0 20px">
-        <button class="template-tab active" data-ftab="notes"        onclick="switchFicheTab('notes')">📊 Notes</button>
-        <button class="template-tab"        data-ftab="comportement" onclick="switchFicheTab('comportement')">⭐ Comportement</button>
-        <button class="template-tab"        data-ftab="quiz"         onclick="switchFicheTab('quiz')">🧠 Quiz</button>
-        <button class="template-tab"        data-ftab="infos"        onclick="switchFicheTab('infos')">ℹ️ Infos</button>
-      </div>
-      <div class="modal-body">
+      <div class="modal-body" style="gap:0">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+          <button class="template-tab active" data-ftab="notes" onclick="switchFicheTab('notes')">📝 Notes</button>
+          <button class="template-tab" data-ftab="comportement" onclick="switchFicheTab('comportement')">⭐ Comportement</button>
+          <button class="template-tab" data-ftab="quiz" onclick="switchFicheTab('quiz')">🧠 Quiz</button>
+          <button class="template-tab" data-ftab="infos" onclick="switchFicheTab('infos')">ℹ️ Infos</button>
+        </div>
+        <input type="hidden" id="ficheEleveId">
 
         <!-- NOTES -->
-        <div id="ftab-notes" class="ftab">
-          <div id="ficheMoyenne" style="display:none;background:var(--bg-main);border-radius:10px;padding:12px 16px;margin-bottom:14px;align-items:center;gap:10px">
-            <span style="font-size:18px">📈</span>
-            <span style="font-size:15px;font-weight:700">Moyenne : <span id="moyenneValue">-</span></span>
+        <div id="ftab-notes" class="ftab active">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <strong>Notes de l'élève</strong>
+            <button class="btn" style="font-size:13px" onclick="openAddNote()">+ Ajouter une note</button>
           </div>
-          <div style="display:flex;gap:8px;margin-bottom:12px">
-            <button class="btn btn-secondary active" id="noteModeLinked" onclick="openAddNote()">📝 Liée à une éval</button>
-            <button class="btn btn-secondary" id="noteModeFree" onclick="openAddNote()">✍️ Note libre</button>
-          </div>
-          <div id="addNoteForm" style="display:none;background:var(--bg-main);border-radius:12px;padding:14px;margin-bottom:14px">
+          <div id="addNoteForm" style="display:none;background:var(--bg-main);border-radius:12px;padding:14px;margin-bottom:14px;border:1px solid var(--border)">
+            <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+              <button class="template-tab active" id="noteModeLinked" style="font-size:12px">🔗 Liée à une éval</button>
+              <button class="template-tab" id="noteModeFree" style="font-size:12px">✏️ Note libre</button>
+            </div>
             <div id="noteSectionLinked">
-              <div class="form-group"><label>Évaluation</label>
-                <select id="noteEvalId" class="input"><option value="">-- Choisir une évaluation --</option></select>
+              <div style="display:grid;grid-template-columns:1fr 1fr 80px;gap:10px;margin-bottom:10px">
+                <div class="form-group" style="margin:0"><label>Évaluation</label>
+                  <select id="noteEvalId" class="input"><option value="">Choisir…</option></select>
+                </div>
+                <div class="form-group" style="margin:0"><label>Note obtenue</label>
+                  <input type="number" id="noteValue" class="input" placeholder="Ex : 14" step="0.5">
+                </div>
+                <div class="form-group" style="margin:0"><label>/ Max</label>
+                  <input type="number" id="noteMax" class="input" placeholder="20" value="20" step="0.5">
+                </div>
               </div>
             </div>
             <div id="noteSectionFree" style="display:none">
-              <div class="form-group"><label>Titre *</label><input type="text" id="noteFreeTitle" class="input" placeholder="Ex : Interrogation orale"></div>
-              <div class="form-group"><label>Matière</label><input type="text" id="noteFreeSubject" class="input" placeholder="Ex : Maths"></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                <div class="form-group" style="margin:0"><label>Titre *</label>
+                  <input type="text" id="noteFreeTitle" class="input" placeholder="Ex : Contrôle surprise">
+                </div>
+                <div class="form-group" style="margin:0"><label>Matière</label>
+                  <input type="text" id="noteFreeSubject" class="input" placeholder="Maths, Français…">
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 80px;gap:10px;margin-bottom:10px">
+                <div class="form-group" style="margin:0"><label>Note obtenue</label>
+                  <input type="number" id="noteValue" class="input" placeholder="Ex : 14" step="0.5">
+                </div>
+                <div class="form-group" style="margin:0"><label>/ Max</label>
+                  <input type="number" id="noteMax" class="input" value="20" step="0.5">
+                </div>
+              </div>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <div class="form-group"><label>Note *</label><input type="number" id="noteValue" class="input" step="0.5" min="0"></div>
-              <div class="form-group"><label>Sur</label><input type="number" id="noteMax" class="input" value="20"></div>
+            <div class="form-group" style="margin:0 0 10px"><label>Commentaire</label>
+              <input type="text" id="noteComment" class="input" placeholder="Commentaire facultatif…">
             </div>
-            <div class="form-group"><label>Commentaire</label><input type="text" id="noteComment" class="input" placeholder="Optionnel…"></div>
             <div style="display:flex;gap:8px">
-              <button class="btn" onclick="saveNote()">Enregistrer</button>
+              <button class="btn" onclick="saveNote()">Enregistrer la note</button>
               <button class="btn btn-secondary" onclick="document.getElementById('addNoteForm').style.display='none'">Annuler</button>
             </div>
           </div>
-          <div id="ficheNotesList"><p class="panel-empty">Aucune note.</p></div>
+          <div id="ficheNotesList"><p class="panel-empty">Aucune note enregistrée.</p></div>
+          <div id="ficheMoyenne" style="margin-top:14px;padding:12px 16px;background:var(--bg-main);border-radius:12px;font-size:15px;font-weight:700;display:none">
+            Moyenne générale : <span id="moyenneValue" style="color:var(--orange)"></span>
+          </div>
         </div>
 
         <!-- COMPORTEMENT -->
         <div id="ftab-comportement" class="ftab" style="display:none">
-          <button class="btn btn-secondary" style="margin-bottom:12px" onclick="openAddIncident()">+ Ajouter</button>
-          <div id="addIncidentForm" style="display:none;background:var(--bg-main);border-radius:12px;padding:14px;margin-bottom:14px">
-            <div class="form-group"><label>Type</label>
-              <select id="incidentType" class="input">
-                <option value="remarque_positive">⭐ Remarque positive</option>
-                <option value="remarque_informative">ℹ️ Remarque informative</option>
-                <option value="sanction">⚠️ Sanction</option>
-              </select>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <strong>Incidents & remarques</strong>
+            <button class="btn" style="font-size:13px" onclick="openAddIncident()">+ Ajouter</button>
+          </div>
+          <div id="addIncidentForm" style="display:none;background:var(--bg-main);border-radius:12px;padding:14px;margin-bottom:14px;border:1px solid var(--border)">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+              <div class="form-group" style="margin:0"><label>Type</label>
+                <select id="incidentType" class="input">
+                  <option value="remarque_positive">⭐ Remarque positive</option>
+                  <option value="remarque_informative">ℹ️ Remarque informative</option>
+                  <option value="sanction">⚠️ Sanction</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0"><label>Date</label>
+                <input type="date" id="incidentDate" class="input">
+              </div>
             </div>
-            <div class="form-group"><label>Date</label><input type="date" id="incidentDate" class="input"></div>
-            <div class="form-group"><label>Description *</label><textarea id="incidentDesc" class="input" rows="3"></textarea></div>
+            <div class="form-group" style="margin:0 0 10px"><label>Description *</label>
+              <textarea id="incidentDesc" class="input" rows="2" placeholder="Décris l'incident ou la remarque…"></textarea>
+            </div>
             <div style="display:flex;gap:8px">
               <button class="btn" onclick="saveIncident()">Enregistrer</button>
               <button class="btn btn-secondary" onclick="document.getElementById('addIncidentForm').style.display='none'">Annuler</button>
             </div>
           </div>
-          <div id="ficheIncidentsList"><p class="panel-empty">Aucun incident.</p></div>
+          <div id="ficheIncidentsList"><p class="panel-empty">Aucun incident enregistré.</p></div>
         </div>
 
         <!-- QUIZ -->
         <div id="ftab-quiz" class="ftab" style="display:none">
-          <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Lance un quiz pour cet élève. La note est enregistrée automatiquement.</p>
-          <div id="ficheQuizList"><p class="panel-empty">Chargement…</p></div>
+          <div id="ficheQuizList"><p class="panel-empty">Chargement des quiz…</p></div>
         </div>
 
         <!-- INFOS -->
         <div id="ftab-infos" class="ftab" style="display:none">
-          <div class="form-group"><label>Prénom</label><input type="text" id="infoFirstName" class="input"></div>
-          <div class="form-group"><label>Nom</label><input type="text" id="infoLastName" class="input"></div>
-          <div class="form-group"><label>Classe</label><select id="infoClassId" class="input"><option value="">Aucune</option></select></div>
-          <div class="form-group"><label>Email parent</label><input type="email" id="infoParentEmail" class="input" placeholder="parent@email.fr"></div>
-          <button class="btn" onclick="saveEleveInfos()">Mettre à jour</button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <div class="form-group"><label>Prénom</label><input type="text" id="infoFirstName" class="input"></div>
+            <div class="form-group"><label>Nom</label><input type="text" id="infoLastName" class="input"></div>
+            <div class="form-group"><label>Classe</label><select id="infoClassId" class="input"><option value="">Aucune</option></select></div>
+            <div class="form-group"><label>Email parent</label><input type="text" id="infoParentEmail" class="input" placeholder="email parent…"></div>
+          </div>
+          <button class="btn" onclick="saveEleveInfos()">💾 Enregistrer les modifications</button>
         </div>
-
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== MODAL QUIZ PASSATION ===== -->
-  <div id="modalQuizPlay" class="modal">
-    <div class="modal-content" style="max-width:600px">
-      <div class="modal-header">
-        <h2 id="quizPlayTitle">Quiz</h2>
-        <button class="modal-close" onclick="document.getElementById('modalQuizPlay').classList.remove('show')">✕</button>
-      </div>
-      <div class="modal-body" id="quizPlayBody" style="max-height:70vh;overflow-y:auto"></div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="document.getElementById('modalQuizPlay').classList.remove('show')">Fermer</button>
-        <button class="btn" onclick="submitQuiz()">✅ Valider les réponses</button>
       </div>
     </div>
   </div>
 
   <!-- ===== MODAL ÉVALUATION ===== -->
   <div id="modalEval" class="modal">
-    <div class="modal-content" style="max-width:620px">
-      <div class="modal-header">
-        <h2 id="modalEvalTitle">Créer une évaluation</h2>
-        <button class="modal-close" id="btnCancelEval">✕</button>
-      </div>
-      <div class="modal-body" style="max-height:75vh;overflow-y:auto">
+    <div class="modal-content" style="max-width:600px">
+      <div class="modal-header"><h2 id="modalEvalTitle">Créer une évaluation</h2><button class="modal-close" id="btnCancelEval">✕</button></div>
+      <div class="modal-body">
         <div class="template-tabs">
           <button class="template-tab active" data-type="standard" onclick="switchEvalTemplate('standard')">📄 Standard</button>
-          <button class="template-tab" data-type="quiz"     onclick="switchEvalTemplate('quiz')">🧠 Quiz QCM</button>
-          <button class="template-tab" data-type="devoir"   onclick="switchEvalTemplate('devoir')">📋 Devoir maison</button>
+          <button class="template-tab" data-type="quiz" onclick="switchEvalTemplate('quiz')">🧠 Quiz QCM</button>
+          <button class="template-tab" data-type="devoir" onclick="switchEvalTemplate('devoir')">📋 Devoir maison</button>
         </div>
         <input type="hidden" id="evalId">
         <input type="hidden" id="evalType" value="standard">
@@ -332,54 +421,57 @@
           <div class="form-group"><label>Date</label><input type="date" id="evalDate" class="input"></div>
           <div class="form-group"><label>Note maximale</label><input type="number" id="evalMaxScore" class="input" value="20"></div>
         </div>
-        <div class="form-group"><label>⏳ Date d'expiration</label><input type="date" id="evalExpiresAt" class="input"></div>
+        <div class="expiry-row"><span>⏳</span><label for="evalExpiresAt">Date d'expiration :</label><input type="date" id="evalExpiresAt" class="input" style="flex:1;width:auto"></div>
         <div class="form-group" style="margin-top:12px">
           <label>👥 Attribuer à</label>
-          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-            <button type="button" class="btn btn-secondary active" data-assign="class"  onclick="toggleAssignment('class')">🏫 Toute la classe</button>
-            <button type="button" class="btn btn-secondary"        data-assign="custom" onclick="toggleAssignment('custom')">🎯 Élèves spécifiques</button>
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <button type="button" class="btn btn-secondary active" data-assign="class" onclick="toggleAssignment('class')">🏫 Toute la classe</button>
+            <button type="button" class="btn btn-secondary" data-assign="custom" onclick="toggleAssignment('custom')">🎯 Élèves spécifiques</button>
           </div>
           <div id="customAssignees" style="display:none;max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:10px"></div>
         </div>
         <div id="quizSection" style="display:none;margin-top:16px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
             <strong>Questions du QCM</strong>
-            <button type="button" class="btn" style="font-size:13px;padding:6px 12px" onclick="addQuizQuestion()">＋ Question</button>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span id="quizQuotaInfo" style="font-size:12px;color:var(--text-muted)"></span>
+              <button type="button" class="btn" style="font-size:13px;padding:6px 12px" onclick="addQuizQuestion()">＋ Ajouter une question</button>
+            </div>
           </div>
           <div id="quizBuilder" class="quiz-builder"></div>
         </div>
       </div>
+      <div class="modal-footer"><button class="btn btn-secondary" id="btnCancelEval2">Annuler</button><button class="btn" id="btnSaveEval">Créer</button></div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL QUIZ PASSATION ===== -->
+  <div id="modalQuizPlay" class="modal">
+    <div class="modal-content" style="max-width:600px">
+      <div class="modal-header"><h2 id="quizPlayTitle">Quiz</h2><button class="modal-close" onclick="document.getElementById('modalQuizPlay').classList.remove('show')">✕</button></div>
+      <div class="modal-body" id="quizPlayBody"></div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="btnCancelEval2">Annuler</button>
-        <button class="btn" id="btnSaveEval">Enregistrer</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalQuizPlay').classList.remove('show')">Fermer</button>
+        <button class="btn" onclick="submitQuiz()">Valider les réponses</button>
       </div>
     </div>
   </div>
 
   <!-- ===== MODAL ACTIVITÉ ===== -->
   <div id="modalActivite" class="modal">
-    <div class="modal-content" style="max-width:480px">
-      <div class="modal-header">
-        <h2 id="modalActiviteTitle">Créer une activité</h2>
-        <button class="modal-close" id="btnCancelActivite">✕</button>
-      </div>
+    <div class="modal-content">
+      <div class="modal-header"><h2 id="modalActiviteTitle">Créer une activité</h2><button class="modal-close" id="btnCancelActivite">✕</button></div>
       <div class="modal-body">
         <input type="hidden" id="activiteId">
         <div class="form-group"><label>Titre *</label><input type="text" id="activiteTitle" class="input" placeholder="Ex : Exercices page 42"></div>
+        <div class="form-group"><label>Description</label><textarea id="activiteDescription" class="input" rows="2" placeholder="Détails…"></textarea></div>
+        <div class="form-group"><label>Instructions détaillées</label><textarea id="activiteInstructions" class="input" rows="2" placeholder="Consignes pour les élèves…"></textarea></div>
         <div class="form-group"><label>Type</label>
           <select id="activiteType" class="input">
-            <option value="devoir">📚 Devoir</option>
-            <option value="dm">🏠 Devoir maison</option>
-            <option value="exercice">✏️ Exercice</option>
-            <option value="projet">🔬 Projet</option>
-            <option value="sortie">🚌 Sortie</option>
-            <option value="cours">📖 Cours</option>
+            <option value="devoir">Devoir</option><option value="exercice">Exercice</option>
+            <option value="quiz">Quiz</option><option value="projet">Projet</option>
           </select>
         </div>
-        <div class="form-group"><label>Classe *</label><select id="activiteClassId" class="input"><option value="">Sélectionner</option></select></div>
-        <div class="form-group"><label>Date de rendu</label><input type="date" id="activiteDueDate" class="input"></div>
-        <div class="form-group"><label>Description</label><textarea id="activiteDescription" class="input" rows="2" placeholder="Résumé rapide…"></textarea></div>
-        <div class="form-group"><label>Instructions détaillées</label><textarea id="activiteInstructions" class="input" rows="3" placeholder="Consignes pour les élèves…"></textarea></div>
         <div class="form-group"><label>Statut</label>
           <select id="activiteStatus" class="input">
             <option value="assigned">📤 Assignée</option>
@@ -388,29 +480,29 @@
             <option value="late">⚠️ En retard</option>
           </select>
         </div>
+        <div class="form-group"><label>Date limite</label><input type="date" id="activiteDueDate" class="input"></div>
+        <div class="form-group"><label>Classe *</label><select id="activiteClassId" class="input"><option value="">Sélectionner une classe</option></select></div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="btnCancelActivite2">Annuler</button>
-        <button class="btn" id="btnSaveActivite">Enregistrer</button>
-      </div>
+      <div class="modal-footer"><button class="btn btn-secondary" id="btnCancelActivite2">Annuler</button><button class="btn" id="btnSaveActivite">Créer</button></div>
     </div>
   </div>
 
   <!-- ===== MODAL CONFIRMATION ===== -->
   <div id="modalConfirm" class="modal">
     <div class="modal-content" style="max-width:380px">
-      <div class="modal-header"><h2>Confirmer</h2><button class="modal-close" id="btnCancelConfirm">✕</button></div>
+      <div class="modal-header"><h2>Confirmer la suppression</h2><button class="modal-close" id="btnCancelConfirm">✕</button></div>
       <div class="modal-body"><p id="confirmText" style="color:var(--text-muted);font-size:14px">Cette action est irréversible.</p></div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="btnCancelConfirm2">Annuler</button>
-        <button class="btn" id="btnConfirmDelete" style="background:#ef4444">Confirmer</button>
-      </div>
+      <div class="modal-footer"><button class="btn btn-secondary" id="btnCancelConfirm2">Annuler</button><button class="btn" id="btnConfirmDelete" style="background:#ef4444">Supprimer</button></div>
     </div>
   </div>
 
   <div id="toast" class="toast"><strong id="toastTitle"></strong><p id="toastMsg"></p></div>
 
   <script src="app.js"></script>
-  <script>document.addEventListener('DOMContentLoaded', () => { if(typeof initProf === 'function') initProf(); });</script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof initProf === 'function') initProf();
+    });
+  </script>
 </body>
 </html>
