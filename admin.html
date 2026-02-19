@@ -204,6 +204,15 @@
             <option value="blocked">🚫 Bloqué</option>
           </select>
         </div>
+
+        <div class="form-group" id="suspendUntilGroup" style="display:none">
+            <label>Suspendu jusqu'au
+                <span style="color:var(--text-muted);font-size:12px">(vide = durée indéfinie)</span>
+            </label>
+            <input type="date" id="editSuspendedUntil" class="input">
+        </div>
+
+
         <!-- Masqué automatiquement pour parent/élève -->
         <div class="form-group" id="editPlanGroup">
           <label>Plan / Licence</label>
@@ -262,6 +271,19 @@
         document.getElementById('editPlanInfo').style.display  = hasPlan ? 'none'  : 'block';
       }
     }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("editUserStatus")?.addEventListener("change", function(){
+            const g = document.getElementById("suspendUntilGroup");
+            if(g) g.style.display = this.value === "suspended" ? "block" : "none";
+            // Réinitialise la date si on quitte "suspendu"
+            if(this.value !== "suspended"){
+                const d = document.getElementById("editSuspendedUntil");
+                if(d) d.value = "";
+            }
+        });
+    });
+
 
     // ── Ouvrir/fermer modal création ─────────────────────────
     function ouvrirModalCreation() {
