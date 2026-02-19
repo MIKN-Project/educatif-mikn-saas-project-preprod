@@ -84,10 +84,10 @@
                      placeholder="🔍 Rechercher…" oninput="adminLoadUsers()">
               <select id="adminRoleFilter" class="input" style="width:160px" onchange="adminLoadUsers()">
                 <option value="">Tous les rôles</option>
-                <option value="admin">Admin</option>
-                <option value="teacher">Professeur</option>
-                <option value="parent">Parent</option>
-                <option value="student">Élève</option>
+                <option value="admin">🛡️ Admin</option>
+                <option value="teacher">👩‍🏫 Professeur</option>
+                <option value="parent">👨‍👩‍👧 Parent</option>
+                <option value="student">🎒 Élève</option>
               </select>
               <button class="btn btn-primary" onclick="ouvrirModalCreation()">
                 ➕ Créer un compte
@@ -98,12 +98,12 @@
         </div>
       </div>
 
-      <!-- ═══ LICENCES ═══ -->
+      <!-- ═══ LICENCES (profs uniquement) ═══ -->
       <div id="view-licences" class="view">
         <div class="panel">
-          <div class="panel-header"><h2>Plans & licences</h2></div>
+          <div class="panel-header"><h2>Plans & licences — Professeurs</h2></div>
           <p style="font-size:14px;color:var(--text-muted);margin-bottom:16px">
-            Gérez les plans d'abonnement des professeurs.
+            Les licences s'appliquent uniquement aux professeurs. Parents et élèves ont toujours accès gratuitement via leur professeur.
           </p>
           <div id="adminLicencesList"><p class="panel-empty">Chargement…</p></div>
         </div>
@@ -144,14 +144,15 @@
         </div>
         <div class="form-group">
           <label>Rôle <strong style="color:#ef4444">*</strong></label>
-          <select id="newRole" class="input">
+          <select id="newRole" class="input" onchange="togglePlanVisibility('new')">
             <option value="teacher">👩‍🏫 Professeur</option>
             <option value="admin">🛡️ Admin</option>
             <option value="parent">👨‍👩‍👧 Parent</option>
             <option value="student">🎒 Élève</option>
           </select>
         </div>
-        <div class="form-group">
+        <!-- Masqué automatiquement pour parent/élève -->
+        <div class="form-group" id="newPlanGroup">
           <label>Plan / Licence</label>
           <select id="newPlan" class="input">
             <option value="free">🆓 Free</option>
@@ -188,9 +189,9 @@
         </div>
         <div class="form-group">
           <label>Rôle <strong style="color:#ef4444">*</strong></label>
-          <select id="editUserRole" class="input">
-            <option value="admin">🛡️ Admin</option>
+          <select id="editUserRole" class="input" onchange="togglePlanVisibility('edit')">
             <option value="teacher">👩‍🏫 Professeur</option>
+            <option value="admin">🛡️ Admin</option>
             <option value="parent">👨‍👩‍👧 Parent</option>
             <option value="student">🎒 Élève</option>
           </select>
@@ -203,13 +204,17 @@
             <option value="blocked">🚫 Bloqué</option>
           </select>
         </div>
-        <div class="form-group">
+        <!-- Masqué automatiquement pour parent/élève -->
+        <div class="form-group" id="editPlanGroup">
           <label>Plan / Licence</label>
           <select id="editUserPlan" class="input">
             <option value="free">🆓 Free</option>
             <option value="pro">⭐ Pro</option>
             <option value="school">🏫 School</option>
           </select>
+        </div>
+        <div id="editPlanInfo" style="display:none;padding:10px 14px;background:var(--bg-main);border-radius:10px;border:1px solid var(--border);font-size:13px;color:var(--text-muted)">
+          ℹ️ Les parents et élèves n'ont pas de licence — leur accès est géré par le professeur.
         </div>
       </div>
       <div class="modal-footer">
@@ -244,63 +249,68 @@
 
   <script src="app.js"></script>
   <script>
-    // ── Helpers modales ──────────────────────────────────────
+
+    // ── Affiche/masque le champ plan selon le rôle ──────────
+    function togglePlanVisibility(context) {
+      const role = document.getElementById(context === 'new' ? 'newRole' : 'editUserRole').value;
+      const hasPlan = role === 'teacher' || role === 'admin';
+
+      if (context === 'new') {
+        document.getElementById('newPlanGroup').style.display = hasPlan ? 'block' : 'none';
+      } else {
+        document.getElementById('editPlanGroup').style.display = hasPlan ? 'block' : 'none';
+        document.getElementById('editPlanInfo').style.display  = hasPlan ? 'none'  : 'block';
+      }
+    }
+
+    // ── Ouvrir/fermer modal création ─────────────────────────
     function ouvrirModalCreation() {
-      document.getElementById("newFullName").value = "";
-      document.getElementById("newEmail").value    = "";
-      document.getElementById("newPassword").value = "";
-      document.getElementById("newPlan").value     = "free";
-      document.getElementById("newRole").value     = "teacher";
-      document.getElementById("modalCreateUser").style.display = "flex";
+      document.getElementById('newFullName').value = '';
+      document.getElementById('newEmail').value    = '';
+      document.getElementById('newPassword').value = '';
+      document.getElementById('newRole').value     = 'teacher';
+      document.getElementById('newPlan').value     = 'free';
+      togglePlanVisibility('new'); // état initial correct
+      document.getElementById('modalCreateUser').style.display = 'flex';
     }
     function fermerModalCreation() {
-      document.getElementById("modalCreateUser").style.display = "none";
+      document.getElementById('modalCreateUser').style.display = 'none';
     }
-    document.getElementById("modalCreateUser").addEventListener("click", (e) => {
+    document.getElementById('modalCreateUser').addEventListener('click', e => {
       if (e.target === e.currentTarget) fermerModalCreation();
     });
 
-    // ── ✅ FIX : role correctement lu depuis le select ───────
-    document.getElementById("createUserBtn").addEventListener("click", async () => {
-      const email     = document.getElementById("newEmail").value.trim();
-      const password  = document.getElementById("newPassword").value;
-      const plan      = document.getElementById("newPlan").value;
-      const role      = document.getElementById("newRole").value;      // ✅ FIX — était manquant
-      const full_name = document.getElementById("newFullName").value.trim();
+    // ── Créer un utilisateur ─────────────────────────────────
+    document.getElementById('createUserBtn').addEventListener('click', async () => {
+      const email     = document.getElementById('newEmail').value.trim();
+      const password  = document.getElementById('newPassword').value;
+      const role      = document.getElementById('newRole').value;
+      const full_name = document.getElementById('newFullName').value.trim();
+      const hasPlan   = role === 'teacher' || role === 'admin';
+      const plan      = hasPlan ? document.getElementById('newPlan').value : 'free';
 
-      if (!email || !password) {
-        toast("Champs requis", "Email et mot de passe obligatoires.", "error");
-        return;
-      }
-      if (password.length < 8) {
-        toast("Mot de passe", "Minimum 8 caractères.", "error");
-        return;
-      }
-      if (!role) {
-        toast("Rôle requis", "Sélectionne un rôle.", "error");
-        return;
-      }
+      if (!email || !password) { toast('Champs requis', 'Email et mot de passe obligatoires.', 'error'); return; }
+      if (password.length < 8) { toast('Mot de passe', 'Minimum 8 caractères.', 'error'); return; }
+      if (!role)               { toast('Rôle requis',  'Sélectionne un rôle.', 'error');  return; }
 
-      const btn = document.getElementById("createUserBtn");
+      const btn = document.getElementById('createUserBtn');
       try {
-        btn.disabled    = true;
-        btn.textContent = "Création…";
+        btn.disabled = true; btn.textContent = 'Création…';
         await adminCreateUser(email, password, plan, role, full_name);
         fermerModalCreation();
-        toast("✅ Compte créé", `${email} — ${role} — plan ${plan}`, "success");
-        if (typeof adminLoadUsers === "function") adminLoadUsers();
-        if (typeof adminLoadStats  === "function") adminLoadStats();
+        toast('✅ Compte créé', `${email} — ${role}${hasPlan ? ' — plan ' + plan : ''}`, 'success');
+        if (typeof adminLoadUsers === 'function') adminLoadUsers();
+        if (typeof adminLoadStats  === 'function') adminLoadStats();
       } catch (e) {
-        toast("Erreur", e.message, "error");
+        toast('Erreur', e.message, 'error');
       } finally {
-        btn.disabled    = false;
-        btn.textContent = "Créer le compte";
+        btn.disabled = false; btn.textContent = 'Créer le compte';
       }
     });
 
     // ── Init ─────────────────────────────────────────────────
-    document.addEventListener("DOMContentLoaded", () => {
-      if (typeof initAdmin === "function") initAdmin();
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof initAdmin === 'function') initAdmin();
     });
   </script>
 
