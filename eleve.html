@@ -241,7 +241,10 @@
     <span class="header-user">🎒 <span id="who">Chargement…</span></span>
     <span id="className" class="tag" style="font-size:13px;"></span>
     <button id="themeBtn" class="btn-icon" title="Thème">🌙</button>
-    <button id="logoutBtn" class="btn btn-secondary btn-sm">Déconnexion</button>
+    <button id="logoutBtn" class="btn btn-secondary btn-sm"
+      onclick="localStorage.removeItem('mcv_eleve'); location.href='eleve-pin.html'">
+      Déconnexion
+    </button>
   </div>
 </header>
 
@@ -573,7 +576,17 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app.js"></script>
-<script>initStudent();</script>
+<script>
+  // Vérification session rapide avant même initStudent
+  try {
+    const _s = localStorage.getItem('mcv_eleve');
+    if (!_s || !JSON.parse(_s)?.id) location.href = 'eleve-pin.html';
+  } catch(e) { location.href = 'eleve-pin.html'; }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof initStudent === 'function') initStudent();
+  });
+</script>
 
 </body>
 </html>
