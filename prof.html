@@ -49,6 +49,7 @@
         <div class="nav-section">COMMUNICATION</div>
         <a href="#" class="nav-item" data-view="parents"><span class="nav-icon">👨‍👩‍👧</span> Parents</a>
         <a href="#" class="nav-item" data-view="messages"><span class="nav-icon">💬</span> Messages<span class="nav-badge" id="msgBadge" style="display:none"></span></a>
+        <a href="#" class="nav-item" data-view="annonces"><span class="nav-icon">📢</span> Annonces</a>
         <!-- Abonnement dans sidebar -->
         <div class="nav-section" style="margin-top:auto">MON COMPTE</div>
         <a href="#" class="nav-item" onclick="event.preventDefault();showPlanModal()">
@@ -161,6 +162,15 @@
       <div id="view-messages" class="view">
         <div class="panel"><div class="panel-header"><h2>Messages</h2></div><p class="panel-empty">Messagerie en développement…</p></div>
       </div>
+      <div id="view-annonces" class="view">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>📢 Annonces</h2>
+            <button class="btn" id="btnAddAnnonce">+ Nouvelle annonce</button>
+          </div>
+          <div id="annoncesList"><p class="panel-empty">Aucune annonce.</p></div>
+        </div>
+      </div>
 
     </main>
   </div>
@@ -261,6 +271,8 @@
       </div>
     </div>
   </div>
+
+  
 
   <!-- ===== MODAL CLASSE ===== -->
   <div id="modalClass" class="modal">
@@ -575,6 +587,67 @@
       <div class="modal-header"><h2>Confirmer la suppression</h2><button class="modal-close" id="btnCancelConfirm">✕</button></div>
       <div class="modal-body"><p id="confirmText" style="color:var(--text-muted);font-size:14px">Cette action est irréversible.</p></div>
       <div class="modal-footer"><button class="btn btn-secondary" id="btnCancelConfirm2">Annuler</button><button class="btn" id="btnConfirmDelete" style="background:#ef4444">Supprimer</button></div>
+    </div>
+  </div>
+
+
+    <!-- ===== MODAL ANNONCE ===== -->
+  <div id="modalAnnonce" class="modal">
+    <div class="modal-content" style="max-width:600px">
+      <div class="modal-header">
+        <h2 id="modalAnnonceTitle">Nouvelle annonce</h2>
+        <button class="modal-close" id="btnCancelAnnonce">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="annonceId">
+        <div class="form-group">
+          <label>Type d'annonce</label>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <button type="button" class="template-tab active" data-atype="info"
+              onclick="switchAnnonceType('info')">ℹ️ Information</button>
+            <button type="button" class="template-tab" data-atype="approval"
+              onclick="switchAnnonceType('approval')">✅ Demande d'accord</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Titre *</label>
+          <input type="text" id="annonceTitle" class="input" placeholder="Ex : Sortie au musée le 15 mars">
+        </div>
+        <div class="form-group">
+          <label>Contenu / Description</label>
+          <textarea id="annonceContent" class="input" rows="3" placeholder="Détails de l'annonce…"></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label>Classe</label>
+            <select id="annonceClassId" class="input" onchange="onAnnonceClassChange()">
+              <option value="">Toutes mes classes</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Date d'expiration</label>
+            <input type="date" id="annonceExpires" class="input">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>👥 Destinataires</label>
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <button type="button" class="btn btn-secondary active" data-atarget="all"
+              onclick="toggleAnnonceTarget('all')">🏫 Toute la classe</button>
+            <button type="button" class="btn btn-secondary" data-atarget="custom"
+              onclick="toggleAnnonceTarget('custom')">🎯 Élèves spécifiques</button>
+          </div>
+          <div id="annonceCustomStudents"
+            style="display:none;max-height:180px;overflow-y:auto;
+                   border:1px solid var(--border);border-radius:8px;padding:10px">
+            <p style="font-size:12px;color:var(--text-muted)">Sélectionne d'abord une classe.</p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnCancelAnnonce2">Annuler</button>
+        <button class="btn" id="btnSaveAnnonce">Publier</button>
+      </div>
     </div>
   </div>
 
