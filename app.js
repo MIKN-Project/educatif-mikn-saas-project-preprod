@@ -1335,3 +1335,849 @@ async function initAdmin() {
   $("#btnCancelConfirm")?.addEventListener("click",  () => { $("#modalConfirm").style.display = "none"; });
   $("#btnCancelConfirm2")?.addEventListener("click", () => { $("#modalConfirm").style.display = "none"; });
 }
+
+// ============================================
+// ÉLÈVE — Educatif MIKN (schema réel)
+// grades / evaluations(quiz_data) / user_id
+// ============================================
+
+let currentStudentId      = null;
+let currentStudentProfile = null;
+let _activeSubmission     = { assignmentId: null, activityId: null, title: null, dueDate: null };
+let _activeQuiz           = null;
+let _quizAnswers          = {};
+let _quizTimerInterval    = null;
+let _quizTimeLeft         = 0;
+let _activiteFilter       = 'all';
+
+async function initStudent() {
+  applyTheme();
+  bindHeader();
+
+  const session = await sbSession();
+  if (!session) { location.href = 'index.html'; return; }
+
+  const profile = await sbProfile();
+
+  if (!profile || profile.role !== 'student') {
+    toast('Accès refusé', 'Espace réservé aux élèves.', 'error');
+    setTimeout(() => {
+      const home = roleHome(profile?.role);
+      location.href = home || 'index.html';
+    }, 700);
+    return;
+  }
+
+  if (profile.status === 'blocked') {
+    await sb().auth.signOut();
+    toast('Compte bloqué', "Contacte ton professeur ou l'administrateur.", 'error');
+    setTimeout(() => location.href = 'index.html', 2500);
+    return;
+  }
+
+  const who = $('#who');
+  if (who) who.textContent = profile.full_name || profile.email || '';
+
+  // Lookup par user_id (colonne réelle de public.students)
+  let { data: student } = await sb()
+    .from('students')
+    .select('*, classes(id, name, teacher_id)')
+    .eq('user_id', profile.id)
+    .maybeSingle();
+
+  // Fallback par email
+  if (!student && profile.email) {
+    const { data: byEmail } = await sb()
+      .from('students')
+      .select('*, classes(id, name, teacher_id)')
+      .eq('email', profile.email)
+      .maybeSingle();
+    if (byEmail) {
+      student = byEmail;
+      await sb().from('students').update({ user_id: profile.id }).eq('id', byEmail.id);
+    }
+  }
+
+  if (!student) { _showStudentLinkPrompt(profile); return; }
+
+  currentStudentId      = student.id;
+  currentStudentProfile = { ...profile, student };
+
+  const classNameEl = $('#className');
+  if (classNameEl) classNameEl.textContent = student.classes?.name || '';
+
+  $$('.nav-item').forEach(item =>
+    item.addEventListener('click', e => {
+      e.preventDefault();
+      switchStudentView(item.dataset.view);
+    })
+  );
+
+  await loadStudentDashboard();
+}
+
+window.switchStudentView = function(viewName) {
+  $$('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.view === viewName));
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + viewName));
+  const titles = {
+    dashboard: { t: 'Tableau de bord',  s: 'Vue rapide' },
+    notes:     { t: 'Mes notes',         s: 'Résultats & moyenne' },
+    activites: { t: 'Mes activités',     s: 'Devoirs & exercices' },
+    quiz:      { t: 'Quiz',              s: 'Évaluations interactives' },
+    messages:  { t: 'Messages',          s: 'Communication avec le professeur' },
+  };
+  const info = titles[viewName] || { t: viewName, s: '' };
+  if ($('#pageTitle'))    $('#pageTitle').textContent    = info.t;
+  if ($('#pageSubtitle')) $('#pageSubtitle').textContent = info.s;
+  if (viewName === 'notes')     loadStudentNotes();
+  if (viewName === 'activites') loadStudentActivites(_activiteFilter);
+  if (viewName === 'quiz')      loadStudentQuiz();
+  if (viewName === 'messages')  loadStudentMessages();
+};
+
+// ============================================
+// DASHBOARD
+// ============================================
+
+async function loadStudentDashboard() {
+  const sid     = currentStudentId;
+  const classId = currentStudentProfile.student.class_id
+                  || currentStudentProfile.student.classes?.id;
+  try {
+    const [
+      { data: grades },
+      { data: acts },
+      { data: quizAttempts },
+      { data: unreadMsgs },
+      { data: availQuiz },
+    ] = await Promise.all([
+      sb().from('grades').select('score, max_score, evaluations(max_score)').eq('student_id', sid),
+      sb().from('activity_assignments').select('id, status, activities(title, due_date, subject)').eq('student_id', sid),
+      sb().from('quiz_attempts').select('quiz_id, completed_at').eq('student_id', sid),
+      sb().from('messages').select('id').eq('recipient_id', currentStudentProfile.id).eq('read', false),
+      classId
+        ? sb().from('evaluations').select('id').eq('class_id', classId).eq('eval_type', 'quiz')
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const validGrades = (grades || []).filter(n => n.score !== null);
+    const getMoy = n => (n.score / (n.max_score || n.evaluations?.max_score || 20)) * 20;
+    const moy = validGrades.length
+      ? validGrades.reduce((s, n) => s + getMoy(n), 0) / validGrades.length : null;
+    if ($('#stat-moyenne')) $('#stat-moyenne').textContent = moy !== null ? moy.toFixed(2) + ' /20' : '—';
+
+    const pending = (acts || []).filter(a => ['assigned', 'in_progress'].includes(a.status));
+    if ($('#stat-pending')) $('#stat-pending').textContent = pending.length;
+    const bAct = $('#badgeActivites');
+    if (bAct) { bAct.style.display = pending.length ? 'inline-block' : 'none'; bAct.textContent = pending.length; }
+
+    const attemptedIds = new Set((quizAttempts || []).map(a => a.quiz_id));
+    const newQuiz = (availQuiz || []).filter(q => !attemptedIds.has(q.id));
+    if ($('#stat-quiz')) $('#stat-quiz').textContent = newQuiz.length;
+    const bQuiz = $('#badgeQuiz');
+    if (bQuiz) { bQuiz.style.display = newQuiz.length ? 'inline-block' : 'none'; bQuiz.textContent = newQuiz.length; }
+
+    const unread = (unreadMsgs || []).length;
+    if ($('#stat-messages')) $('#stat-messages').textContent = unread;
+    const bMsg = $('#badgeMessages');
+    if (bMsg) { bMsg.style.display = unread ? 'inline-block' : 'none'; bMsg.textContent = unread; }
+
+    const { data: recentGrades } = await sb()
+      .from('grades').select('*, evaluations(title, subject, eval_date, max_score)')
+      .eq('student_id', sid).order('created_at', { ascending: false }).limit(5);
+    _renderDashRecentNotes(recentGrades || []);
+    _renderDashUrgentActivities(pending.slice(0, 3));
+
+  } catch(e) { toast('Erreur', e.message, 'error'); }
+}
+
+function _renderDashRecentNotes(notes) {
+  const c = $('#dashRecentNotes');
+  if (!c) return;
+  if (!notes.length) { c.innerHTML = '<p class="panel-empty">Aucune note disponible.</p>'; return; }
+  c.innerHTML = notes.map(n => {
+    const titre = n.free_title   || n.evaluations?.title   || 'Note';
+    const mat   = n.free_subject || n.evaluations?.subject  || '';
+    const max   = n.max_score    || n.evaluations?.max_score|| 20;
+    const pct   = n.score !== null ? (n.score / max) * 100 : null;
+    const color = pct === null ? '#888' : pct >= 70 ? '#16a34a' : pct >= 50 ? '#f97316' : '#dc2626';
+    return `<div class="note-row">
+      <div class="note-info">
+        <span class="note-title">${titre}</span>
+        ${mat ? `<span class="tag">${mat}</span>` : ''}
+      </div>
+      <span class="note-score" style="color:${color};font-weight:700;">
+        ${n.score !== null ? n.score : '—'}/${max}
+      </span>
+    </div>`;
+  }).join('');
+}
+
+function _renderDashUrgentActivities(acts) {
+  const c = $('#dashUrgentActivities');
+  if (!c) return;
+  if (!acts.length) { c.innerHTML = '<p class="panel-empty">Aucune activité en attente.</p>'; return; }
+  const today = new Date();
+  c.innerHTML = acts.map(a => {
+    const act     = a.activities || {};
+    const due     = act.due_date ? new Date(act.due_date) : null;
+    const overdue = due && due < today;
+    const dueStr  = due ? due.toLocaleDateString('fr-FR') : 'Pas de date limite';
+    return `<div class="activity-row">
+      <div>
+        <span class="note-title">${act.title || 'Activité'}</span>
+        ${act.subject ? `<span class="tag" style="margin-left:6px;">${act.subject}</span>` : ''}
+      </div>
+      <span class="${overdue ? 'badge badge-error' : 'tag'}" style="flex-shrink:0;">${dueStr}</span>
+    </div>`;
+  }).join('');
+}
+
+// ============================================
+// NOTES — table grades
+// ============================================
+
+async function loadStudentNotes() {
+  const sid = currentStudentId;
+  const container = $('#notesContainer');
+  if (!container) return;
+  container.innerHTML = '<p class="panel-empty">Chargement…</p>';
+  try {
+    const { data: notes, error } = await sb()
+      .from('grades')
+      .select('*, evaluations(id, title, subject, eval_date, max_score)')
+      .eq('student_id', sid)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    if ($('#noteCount')) $('#noteCount').textContent = `${(notes||[]).length} note(s) enregistrée(s)`;
+
+    if (!notes?.length) {
+      container.innerHTML = '<p class="panel-empty">Aucune note disponible.</p>';
+      if ($('#globalMoyenne'))     $('#globalMoyenne').textContent   = '—';
+      if ($('#matieresContainer')) $('#matieresContainer').innerHTML = '<p class="panel-empty">Aucune donnée.</p>';
+      if ($('#lastNoteDate'))      $('#lastNoteDate').textContent    = '—';
+      return;
+    }
+
+    const valid = notes.filter(n => n.score !== null);
+    const getS20 = n => (n.score / (n.max_score || n.evaluations?.max_score || 20)) * 20;
+    const moy = valid.length ? valid.reduce((s, n) => s + getS20(n), 0) / valid.length : null;
+    if ($('#globalMoyenne')) $('#globalMoyenne').textContent = moy !== null ? moy.toFixed(2) : '—';
+
+    const banner = document.querySelector('.moyenne-banner');
+    if (banner && moy !== null) {
+      banner.style.background = moy >= 14
+        ? 'linear-gradient(135deg,#16a34a,#15803d)'
+        : moy >= 10 ? 'linear-gradient(135deg,#f97316,#ea580c)'
+        : 'linear-gradient(135deg,#dc2626,#b91c1c)';
+    }
+    if ($('#lastNoteDate') && notes[0]) {
+      const d = notes[0].evaluations?.eval_date
+        ? new Date(notes[0].evaluations.eval_date).toLocaleDateString('fr-FR')
+        : new Date(notes[0].created_at).toLocaleDateString('fr-FR');
+      $('#lastNoteDate').textContent = d;
+    }
+
+    const bySubject = {};
+    notes.forEach(n => {
+      const sub = n.free_subject || n.evaluations?.subject || 'Autre';
+      if (!bySubject[sub]) bySubject[sub] = [];
+      if (n.score !== null) bySubject[sub].push(getS20(n));
+    });
+    const mc = $('#matieresContainer');
+    if (mc) {
+      mc.innerHTML = Object.entries(bySubject).map(([sub, scores]) => {
+        const avg   = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
+        const color = avg === null ? '#888' : avg >= 14 ? '#16a34a' : avg >= 10 ? '#f97316' : '#dc2626';
+        return `<div class="matiere-badge" style="border-left-color:${color}">
+          <span>${sub}</span>
+          <strong style="color:${color}">${avg !== null ? avg.toFixed(1) : '—'}/20</strong>
+        </div>`;
+      }).join('');
+    }
+
+    container.innerHTML = `
+    <table class="table">
+      <thead><tr>
+        <th>Évaluation</th><th>Matière</th><th>Date</th>
+        <th>Note</th><th>Progression</th><th>Commentaire</th>
+      </tr></thead>
+      <tbody>
+        ${notes.map(n => {
+          const titre   = n.free_title   || n.evaluations?.title   || 'Note';
+          const mat     = n.free_subject || n.evaluations?.subject  || '—';
+          const date    = n.evaluations?.eval_date
+            ? new Date(n.evaluations.eval_date).toLocaleDateString('fr-FR') : '—';
+          const max     = n.max_score || n.evaluations?.max_score || 20;
+          const pct     = n.score !== null ? Math.round((n.score / max) * 100) : 0;
+          const color   = pct >= 70 ? '#16a34a' : pct >= 50 ? '#f97316' : '#dc2626';
+          const comment = n.comment
+            ? `<span title="${n.comment}" style="cursor:help;font-size:16px;">💬</span>` : '—';
+          return `<tr>
+            <td><strong>${titre}</strong></td>
+            <td><span class="tag">${mat}</span></td>
+            <td style="white-space:nowrap;">${date}</td>
+            <td><span style="font-weight:700;color:${color};font-size:15px;">${n.score !== null ? n.score : '—'}/${max}</span></td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div class="progress-bar-wrap" style="width:70px;">
+                  <div class="progress-bar" style="width:${pct}%;background:${color};"></div>
+                </div>
+                <small style="color:${color};font-weight:600;">${pct}%</small>
+              </div>
+            </td>
+            <td>${comment}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+
+  } catch(e) {
+    container.innerHTML = '<p class="panel-empty">Erreur de chargement.</p>';
+    toast('Erreur', e.message, 'error');
+  }
+}
+
+// ============================================
+// ACTIVITÉS
+// ============================================
+
+window.filterActivites = function(btn, filter) {
+  $$('.filter-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  _activiteFilter = filter;
+  loadStudentActivites(filter);
+};
+
+async function loadStudentActivites(filter = 'all') {
+  const sid = currentStudentId;
+  const container = $('#activitesContainer');
+  if (!container) return;
+  container.innerHTML = '<p class="empty">Chargement…</p>';
+  try {
+    const { data, error } = await sb()
+      .from('activity_assignments')
+      .select('*, activities(id, title, description, subject, due_date, activity_type, instructions)')
+      .eq('student_id', sid)
+      .order('assigned_at', { ascending: false });
+    if (error) throw error;
+
+    const today = new Date();
+    let items = (data || []).map(a => {
+      const due    = a.activities?.due_date ? new Date(a.activities.due_date) : null;
+      const isLate = due && due < today && !['submitted','graded'].includes(a.status);
+      return { ...a, _status: isLate ? 'late' : (a.status || 'assigned') };
+    });
+    if (filter !== 'all') items = items.filter(a => a._status === filter);
+
+    if (!items.length) { container.innerHTML = '<p class="empty">Aucune activité pour ce filtre.</p>'; return; }
+
+    const statusInfo = {
+      assigned:    { label: '📤 Assignée',   cls: 'badge-info'    },
+      in_progress: { label: '⏳ En cours',   cls: 'badge-warning' },
+      submitted:   { label: '✅ Rendue',     cls: 'badge-success' },
+      graded:      { label: '🎯 Corrigée',   cls: 'badge-purple'  },
+      late:        { label: '⚠️ En retard',  cls: 'badge-error'   },
+    };
+
+    container.innerHTML = items.map(a => {
+      const act       = a.activities || {};
+      const status    = a._status;
+      const si        = statusInfo[status] || statusInfo.assigned;
+      const due       = act.due_date ? new Date(act.due_date) : null;
+      const overdue   = due && due < today && !['submitted','graded'].includes(status);
+      const canSubmit = !['submitted','graded'].includes(status);
+      const dueStr    = due ? due.toLocaleDateString('fr-FR') : 'Pas de date limite';
+      const titleEsc  = (act.title || '').replace(/'/g, "\\'");
+      const dueEsc    = (act.due_date || '').replace(/'/g, "\\'");
+
+      return `<div class="activity-card status-${status}">
+        <div class="activity-card-header">
+          <div>
+            <h3 class="activity-title">${act.title || 'Activité'}</h3>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
+              ${act.subject       ? `<span class="tag">${act.subject}</span>` : ''}
+              ${act.activity_type ? `<span class="tag tag-type">${act.activity_type}</span>` : ''}
+            </div>
+          </div>
+          <span class="badge ${si.cls}">${si.label}</span>
+        </div>
+        ${act.description ? `<p class="activity-desc">${act.description}</p>` : ''}
+        ${act.instructions && act.instructions !== act.description
+          ? `<p class="activity-desc" style="color:var(--text-muted);">📌 ${act.instructions}</p>` : ''}
+        ${(a.grade !== null && a.grade !== undefined)
+          ? `<div style="display:inline-flex;align-items:center;gap:6px;background:#d1fae5;
+                         border-radius:8px;padding:6px 12px;font-size:13px;color:#065f46;margin-top:6px;">
+               🎯 Note obtenue : <strong>${a.grade}/20</strong></div>` : ''}
+        ${a.teacher_comment ? `<p class="teacher-comment">💬 ${a.teacher_comment}</p>` : ''}
+        <div class="activity-footer">
+          <span class="due-date ${overdue ? 'overdue' : ''}">📅 ${overdue ? '⚠️ ' : ''}${dueStr}</span>
+          ${canSubmit
+            ? `<button class="btn btn-primary btn-sm"
+                 onclick="openSubmissionModal('${a.id}','${act.id}','${titleEsc}','${dueEsc}')">
+                 ${status === 'in_progress' ? 'Continuer →' : 'Rendre le devoir →'}</button>`
+            : `<button class="btn btn-secondary btn-sm"
+                 onclick="openSubmissionModal('${a.id}','${act.id}','${titleEsc}','${dueEsc}')">
+                 Voir ma réponse</button>`}
+        </div>
+      </div>`;
+    }).join('');
+
+  } catch(e) {
+    container.innerHTML = '<p class="empty">Erreur de chargement.</p>';
+    toast('Erreur', e.message, 'error');
+  }
+}
+
+// ============================================
+// SOUMISSION DE DEVOIR
+// ============================================
+
+window.openSubmissionModal = async function(assignmentId, activityId, title, dueDate) {
+  _activeSubmission = { assignmentId, activityId, title, dueDate };
+  if ($('#submissionTitle')) $('#submissionTitle').textContent = title;
+  if ($('#submissionDue')) {
+    const d = dueDate ? new Date(dueDate).toLocaleDateString('fr-FR') : null;
+    $('#submissionDue').textContent = d ? `📅 Date limite : ${d}` : '';
+  }
+  if ($('#submissionText'))     $('#submissionText').value       = '';
+  if ($('#submissionFile'))     $('#submissionFile').value       = '';
+  if ($('#submissionPreview'))  $('#submissionPreview').innerHTML = '';
+  if ($('#submissionExisting')) $('#submissionExisting').style.display = 'none';
+
+  try {
+    const { data } = await sb().from('submissions').select('*')
+      .eq('assignment_id', assignmentId).eq('student_id', currentStudentId).maybeSingle();
+    if (data) {
+      if ($('#submissionExisting')) $('#submissionExisting').style.display = 'block';
+      if (data.content && $('#submissionText')) $('#submissionText').value = data.content;
+      if (data.file_url && $('#submissionPreview'))
+        $('#submissionPreview').innerHTML =
+          `<a href="${data.file_url}" target="_blank" class="tag" style="color:#1d4ed8;">
+             📎 Fichier déjà envoyé (cliquer pour voir)</a>`;
+    }
+  } catch(e) { /* silencieux */ }
+  $('#modalSubmission')?.classList.add('show');
+};
+
+window.previewSubmissionFile = function(input) {
+  const preview = $('#submissionPreview');
+  if (!preview || !input.files?.length) return;
+  const file = input.files[0];
+  preview.innerHTML = `<span class="tag">📎 ${file.name} (${(file.size/1024).toFixed(0)} ko)</span>`;
+};
+
+window.submitDevoir = async function() {
+  const content   = $('#submissionText')?.value.trim() || '';
+  const fileInput = $('#submissionFile');
+  const btn       = $('#btnSubmitDevoir');
+  if (!content && !fileInput?.files?.length) {
+    toast('Requis', 'Ajoute une réponse écrite ou un fichier.', 'error'); return;
+  }
+  btn.disabled = true; btn.textContent = 'Envoi en cours…';
+  try {
+    let fileUrl = null;
+    if (fileInput?.files?.length) {
+      const file     = fileInput.files[0];
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path     = `${currentStudentId}/${Date.now()}_${safeName}`;
+      const { error: upErr } = await sb().storage.from('devoirs').upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      const { data: urlData } = sb().storage.from('devoirs').getPublicUrl(path);
+      fileUrl = urlData?.publicUrl || null;
+    }
+    const { error: subErr } = await sb().from('submissions').upsert({
+      assignment_id: _activeSubmission.assignmentId,
+      activity_id:   _activeSubmission.activityId,
+      student_id:    currentStudentId,
+      content:       content || null,
+      file_url:      fileUrl,
+      status:        'submitted',
+      submitted_at:  new Date().toISOString(),
+    }, { onConflict: 'assignment_id,student_id' });
+    if (subErr) throw subErr;
+    await sb().from('activity_assignments').update({ status: 'submitted' })
+      .eq('id', _activeSubmission.assignmentId).eq('student_id', currentStudentId);
+    toast('✅ Devoir rendu !', 'Ton professeur a été notifié.', 'success');
+    $('#modalSubmission')?.classList.remove('show');
+    loadStudentActivites(_activiteFilter);
+    loadStudentDashboard();
+  } catch(e) {
+    toast('Erreur', e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Rendre le devoir ✓';
+  }
+};
+
+// ============================================
+// QUIZ — evaluations avec eval_type='quiz'
+// ============================================
+
+async function loadStudentQuiz() {
+  const sid      = currentStudentId;
+  const classId  = currentStudentProfile.student.class_id
+                   || currentStudentProfile.student.classes?.id;
+  const container = $('#quizContainer');
+  if (!container) return;
+  container.innerHTML = '<p class="empty">Chargement…</p>';
+  try {
+    if (!classId) { container.innerHTML = '<p class="empty">Aucune classe associée.</p>'; return; }
+
+    const [{ data: quizList }, { data: attempts }] = await Promise.all([
+      sb().from('evaluations')
+          .select('id, title, subject, quiz_data, expires_at, eval_type, created_at')
+          .eq('class_id', classId).eq('eval_type', 'quiz')
+          .order('created_at', { ascending: false }),
+      sb().from('quiz_attempts').select('quiz_id, score, total_points, completed_at')
+          .eq('student_id', sid),
+    ]);
+
+    if (!quizList?.length) {
+      container.innerHTML = '<p class="empty">Aucun quiz disponible pour ta classe.</p>'; return;
+    }
+
+    const attemptMap = {};
+    (attempts || []).forEach(a => { attemptMap[a.quiz_id] = a; });
+    const now = new Date();
+
+    container.innerHTML = quizList.map(q => {
+      const questions = Array.isArray(q.quiz_data) ? q.quiz_data : (q.quiz_data?.questions || []);
+      const qCount    = questions.length;
+      const duree     = q.quiz_data?.duree_minutes ? `⏱️ ${q.quiz_data.duree_minutes} min` : '';
+      const expired   = q.expires_at ? new Date(q.expires_at) < now : false;
+      const attempt   = attemptMap[q.id];
+      const isDone    = !!attempt?.completed_at;
+
+      let statusBadge = '', actionBtn = '';
+      if (isDone) {
+        const pct   = attempt.total_points > 0 ? Math.round((attempt.score / attempt.total_points) * 100) : 0;
+        const color = pct >= 70 ? '#065f46' : pct >= 50 ? '#92400e' : '#991b1b';
+        const bg    = pct >= 70 ? '#d1fae5' : pct >= 50 ? '#fef3c7' : '#fee2e2';
+        statusBadge = `<span class="badge" style="background:${bg};color:${color};">✅ ${attempt.score}/${attempt.total_points} (${pct}%)</span>`;
+        actionBtn   = `<button class="btn btn-secondary btn-sm" onclick="showQuizResult('${q.id}')">Voir mon résultat</button>`;
+      } else if (expired) {
+        statusBadge = `<span class="badge badge-info">🔒 Expiré</span>`;
+      } else {
+        statusBadge = `<span class="badge badge-warning">📝 À faire</span>`;
+        actionBtn   = `<button class="btn btn-primary btn-sm" onclick="startQuiz('${q.id}')">Commencer →</button>`;
+      }
+
+      return `<div class="quiz-card">
+        <div class="quiz-card-header">
+          <div>
+            <h3 class="activity-title">${q.title || 'Quiz'}</h3>
+            ${q.subject ? `<div style="margin-top:4px;"><span class="tag">${q.subject}</span></div>` : ''}
+          </div>
+          ${statusBadge}
+        </div>
+        <div class="quiz-meta">
+          <span>❓ ${qCount} question${qCount > 1 ? 's' : ''}</span>
+          ${duree ? `<span>${duree}</span>` : ''}
+          ${q.expires_at && !isDone
+            ? `<span style="color:${expired ? '#dc2626' : '#92400e'};">
+                 📅 ${expired ? 'Expiré le' : 'Expire le'} ${new Date(q.expires_at).toLocaleDateString('fr-FR')}
+               </span>` : ''}
+        </div>
+        <div class="activity-footer" style="justify-content:flex-end;">${actionBtn}</div>
+      </div>`;
+    }).join('');
+
+  } catch(e) {
+    container.innerHTML = '<p class="empty">Erreur de chargement.</p>';
+    toast('Erreur', e.message, 'error');
+  }
+}
+
+// ============================================
+// QUIZ PLAYER
+// ============================================
+
+window.startQuiz = async function(quizId) {
+  try {
+    const { data: quiz, error } = await sb().from('evaluations').select('*').eq('id', quizId).maybeSingle();
+    if (error || !quiz) { toast('Erreur', 'Quiz introuvable.', 'error'); return; }
+    const expired = quiz.expires_at ? new Date(quiz.expires_at) < new Date() : false;
+    if (expired) { toast('Expiré', "Ce quiz n'est plus disponible.", 'error'); return; }
+
+    const { data: existing } = await sb().from('quiz_attempts').select('id, completed_at')
+      .eq('quiz_id', quizId).eq('student_id', currentStudentId).maybeSingle();
+    if (existing?.completed_at) {
+      if (confirm('Tu as déjà passé ce quiz. Voir le résultat ?')) showQuizResult(quizId);
+      return;
+    }
+
+    _activeQuiz = quiz; _quizAnswers = {};
+    clearInterval(_quizTimerInterval);
+    const duree = quiz.quiz_data?.duree_minutes;
+    if (duree) { _quizTimeLeft = duree * 60; _startQuizTimer(); }
+    else { const el = $('#quizTimer'); if (el) el.style.display = 'none'; }
+
+    _renderQuizPlayer(quiz);
+    $('#modalQuiz')?.classList.add('show');
+    $('#quizCloseBtn')?.addEventListener('click',  _confirmQuizClose, { once: true });
+    $('#quizCancelBtn')?.addEventListener('click', _confirmQuizClose, { once: true });
+  } catch(e) { toast('Erreur', e.message, 'error'); }
+};
+
+function _confirmQuizClose() {
+  if (confirm('Abandonner le quiz ? Ta progression sera perdue.')) {
+    clearInterval(_quizTimerInterval);
+    _activeQuiz = null; _quizAnswers = {};
+    $('#modalQuiz')?.classList.remove('show');
+  }
+}
+
+function _startQuizTimer() {
+  const el = $('#quizTimerDisplay'), timerEl = $('#quizTimer');
+  if (timerEl) timerEl.style.display = 'inline-flex';
+  _quizTimerInterval = setInterval(() => {
+    _quizTimeLeft--;
+    const m = Math.floor(_quizTimeLeft / 60), s = _quizTimeLeft % 60;
+    if (el) el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    if (_quizTimeLeft <= 60 && timerEl) timerEl.classList.add('danger');
+    if (_quizTimeLeft <= 0) { clearInterval(_quizTimerInterval); toast('⏱️ Temps écoulé', 'Soumission automatique.', 'error'); _submitQuizFinal(true); }
+  }, 1000);
+}
+
+function _renderQuizPlayer(quiz) {
+  const qs = Array.isArray(quiz.quiz_data) ? quiz.quiz_data : (quiz.quiz_data?.questions || []);
+  if ($('#quizPlayerTitle')) $('#quizPlayerTitle').textContent = quiz.title || 'Quiz';
+  if ($('#quizProgress'))    $('#quizProgress').textContent   = `${qs.length} question${qs.length > 1 ? 's' : ''}`;
+  if ($('#quizProgressBar')) $('#quizProgressBar').style.width = '0%';
+
+  const container = $('#quizQuestionsContainer');
+  if (!container) return;
+  container.innerHTML = qs.map((q, idx) => {
+    const qtype   = q.type || 'qcm';
+    const imgHtml = q.image_url ? `<img src="${q.image_url}" style="max-width:100%;border-radius:8px;margin-bottom:12px;" alt="">` : '';
+    let inputHtml = '';
+    if (qtype === 'qcm') {
+      inputHtml = (q.options || []).map((opt, oi) =>
+        `<label class="quiz-option" id="opt_${idx}_${oi}">
+           <input type="radio" name="q_${idx}" value="${oi}"
+                  onchange="window._quizSelectAnswer(${idx},${oi})">
+           <span>${opt}</span>
+         </label>`
+      ).join('');
+    } else if (qtype === 'truefalse') {
+      inputHtml = `
+        <label class="quiz-option" id="opt_${idx}_true">
+          <input type="radio" name="q_${idx}" value="true" onchange="window._quizSelectAnswer(${idx},'true')">
+          <span>✅ Vrai</span></label>
+        <label class="quiz-option" id="opt_${idx}_false">
+          <input type="radio" name="q_${idx}" value="false" onchange="window._quizSelectAnswer(${idx},'false')">
+          <span>❌ Faux</span></label>`;
+    } else if (qtype === 'open') {
+      inputHtml = `<textarea class="input" rows="3" placeholder="Ta réponse…"
+        oninput="window._quizSelectAnswer(${idx},this.value)"></textarea>`;
+    }
+    return `<div class="quiz-question" id="qq_${idx}">
+      <div class="quiz-question-header">
+        <span class="quiz-q-num">Question ${idx + 1} / ${qs.length}</span>
+        ${q.points ? `<span class="tag">${q.points} pt${q.points > 1 ? 's' : ''}</span>` : ''}
+      </div>
+      ${imgHtml}
+      <p class="quiz-q-text">${q.question || q.text || ''}</p>
+      <div class="quiz-options">${inputHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+window._quizSelectAnswer = function(qIdx, value) {
+  _quizAnswers[qIdx] = value;
+  const qq = document.getElementById(`qq_${qIdx}`);
+  if (qq) {
+    qq.querySelectorAll('.quiz-option').forEach(el => el.classList.remove('selected'));
+    qq.querySelector(`input[value="${value}"]`)?.closest('.quiz-option')?.classList.add('selected');
+  }
+  const qs  = Array.isArray(_activeQuiz?.quiz_data) ? _activeQuiz.quiz_data : (_activeQuiz?.quiz_data?.questions || []);
+  const pct = qs.length > 0 ? (Object.keys(_quizAnswers).length / qs.length) * 100 : 0;
+  const pb  = $('#quizProgressBar');
+  if (pb) pb.style.width = pct + '%';
+};
+
+window.submitQuiz = function() { _submitQuizFinal(false); };
+
+async function _submitQuizFinal(autoSubmit = false) {
+  if (!_activeQuiz) return;
+  const qs = Array.isArray(_activeQuiz.quiz_data) ? _activeQuiz.quiz_data : (_activeQuiz.quiz_data?.questions || []);
+  if (!autoSubmit && Object.keys(_quizAnswers).length < qs.length) {
+    if (!confirm(`Tu n'as répondu qu'à ${Object.keys(_quizAnswers).length}/${qs.length} question(s). Soumettre quand même ?`)) return;
+  }
+  clearInterval(_quizTimerInterval);
+
+  let score = 0;
+  const details = qs.map((q, idx) => {
+    const answer = _quizAnswers[idx] ?? null;
+    const isOpen = (q.type || 'qcm') === 'open';
+    let correct  = false;
+    if (!isOpen && q.correct_answer !== undefined && answer !== null) {
+      correct = String(answer) === String(q.correct_answer);
+      if (correct) score += (q.points || 1);
+    }
+    return { question: q.question || q.text || '', answer, correct_answer: q.correct_answer ?? null, correct, is_open: isOpen };
+  });
+  const totalPoints = qs.reduce((s, q) => s + (q.points || 1), 0);
+
+  try {
+    const { error } = await sb().from('quiz_attempts').upsert({
+      quiz_id: _activeQuiz.id, student_id: currentStudentId,
+      answers: _quizAnswers, details, score, total_points: totalPoints,
+      completed_at: new Date().toISOString(),
+    }, { onConflict: 'quiz_id,student_id' });
+    if (error) throw error;
+    $('#modalQuiz')?.classList.remove('show');
+    _showQuizResultModal({ score, totalPoints, details, quiz: _activeQuiz });
+    loadStudentQuiz();
+    loadStudentDashboard();
+  } catch(e) { toast('Erreur', e.message, 'error'); }
+}
+
+// ============================================
+// RÉSULTAT QUIZ
+// ============================================
+
+window.showQuizResult = async function(quizId) {
+  try {
+    const [{ data: attempt }, { data: quiz }] = await Promise.all([
+      sb().from('quiz_attempts').select('*').eq('quiz_id', quizId).eq('student_id', currentStudentId).maybeSingle(),
+      sb().from('evaluations').select('*').eq('id', quizId).maybeSingle(),
+    ]);
+    if (!attempt || !quiz) { toast('Résultat', 'Résultat introuvable.', 'error'); return; }
+    _showQuizResultModal({
+      score:       attempt.score,
+      totalPoints: attempt.total_points || (Array.isArray(quiz.quiz_data) ? quiz.quiz_data : (quiz.quiz_data?.questions || [])).length,
+      details:     attempt.details || [],
+      quiz,
+    });
+  } catch(e) { toast('Erreur', e.message, 'error'); }
+};
+
+function _showQuizResultModal({ score, totalPoints, details, quiz }) {
+  const pct   = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
+  const color = pct >= 70 ? '#16a34a' : pct >= 50 ? '#f97316' : '#dc2626';
+  const bg    = pct >= 70 ? '#d1fae5' : pct >= 50 ? '#fef3c7' : '#fee2e2';
+  const emoji = pct >= 70 ? '🎉' : pct >= 50 ? '👍' : '💪';
+  const scoreEl  = $('#quizResultScore');
+  const detailEl = $('#quizResultDetail');
+  if (scoreEl) {
+    scoreEl.innerHTML = `
+    <div style="font-size:3.5rem;margin-bottom:8px;">${emoji}</div>
+    <div style="font-size:2.4rem;font-weight:900;color:${color};">${score}/${totalPoints}</div>
+    <div style="background:${bg};color:${color};border-radius:999px;
+                display:inline-block;padding:4px 18px;font-weight:700;margin-top:8px;">${pct}%</div>
+    <div style="color:var(--text-muted);font-size:14px;margin-top:8px;">${quiz.title || 'Quiz'}</div>`;
+  }
+  if (detailEl) {
+    detailEl.innerHTML = (details || []).map((d, i) => {
+      if (d.is_open) return `<div class="quiz-result-row open">
+        <strong>Q${i+1} :</strong> ${d.question}
+        <small>Ta réponse : ${d.answer || '—'} — correction par le professeur</small>
+      </div>`;
+      return `<div class="quiz-result-row ${d.correct ? 'correct' : 'wrong'}">
+        <strong>${d.correct ? '✅' : '❌'} Q${i+1} :</strong> ${d.question}
+        ${!d.correct && d.correct_answer !== null ? `<small>Bonne réponse : ${d.correct_answer}</small>` : ''}
+      </div>`;
+    }).join('');
+  }
+  $('#modalQuizResult')?.classList.add('show');
+}
+
+// ============================================
+// MESSAGES
+// ============================================
+
+async function loadStudentMessages() {
+  const profileId = currentStudentProfile.id;
+  const thread    = $('#msgThread');
+  if (!thread) return;
+  thread.innerHTML = '<p class="empty">Chargement…</p>';
+  try {
+    const { data, error } = await sb().from('messages').select('*')
+      .or(`sender_id.eq.${profileId},recipient_id.eq.${profileId}`)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+
+    await sb().from('messages').update({ read: true })
+      .eq('recipient_id', profileId).eq('read', false);
+    const bMsg = $('#badgeMessages');
+    if (bMsg) bMsg.style.display = 'none';
+    if ($('#stat-messages')) $('#stat-messages').textContent = '0';
+
+    if (!data?.length) {
+      thread.innerHTML = '<p class="empty">Aucun message. Écris le premier message à ton professeur.</p>';
+      return;
+    }
+    thread.innerHTML = data.map(msg => {
+      const isSent = msg.sender_id === profileId;
+      const date   = new Date(msg.created_at).toLocaleString('fr-FR', {
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+      });
+      return `<div style="display:flex;flex-direction:column;align-items:${isSent ? 'flex-end' : 'flex-start'};">
+        <div class="msg-bubble ${isSent ? 'sent' : 'received'}">
+          ${msg.content}
+          <div class="msg-meta">${date}</div>
+        </div>
+      </div>`;
+    }).join('');
+    thread.scrollTop = thread.scrollHeight;
+  } catch(e) {
+    thread.innerHTML = '<p class="empty">Erreur de chargement.</p>';
+    toast('Erreur', e.message, 'error');
+  }
+}
+
+window.sendStudentMessage = async function() {
+  const input     = $('#msgInput');
+  const content   = input?.value.trim();
+  const teacherId = currentStudentProfile.student.classes?.teacher_id;
+  if (!content) return;
+  if (!teacherId) { toast('Erreur', 'Professeur introuvable.', 'error'); return; }
+  input.disabled = true;
+  try {
+    const { error } = await sb().from('messages').insert({
+      sender_id:    currentStudentProfile.id,
+      recipient_id: teacherId,
+      student_id:   currentStudentId,
+      content,
+      read: false,
+    });
+    if (error) throw error;
+    input.value = '';
+    await loadStudentMessages();
+  } catch(e) {
+    toast('Erreur', e.message, 'error');
+  } finally {
+    input.disabled = false;
+    input.focus();
+  }
+};
+
+// ============================================
+// COMPTE NON LIÉ
+// ============================================
+
+function _showStudentLinkPrompt(profile) {
+  const main = document.querySelector('.main-content');
+  if (!main) return;
+  main.innerHTML = `
+  <div style="display:flex;align-items:center;justify-content:center;min-height:50vh;">
+    <div class="panel" style="max-width:480px;text-align:center;">
+      <div style="font-size:3rem;margin-bottom:12px;">🔗</div>
+      <h2 style="font-size:20px;font-weight:800;margin-bottom:8px;">Compte non associé</h2>
+      <p style="color:var(--text-muted);font-size:14px;margin-bottom:16px;">
+        Ton compte n'est pas encore lié à une fiche élève.<br>
+        Donne cette adresse email à ton professeur pour qu'il fasse le lien.
+      </p>
+      <div style="background:var(--bg-main);border-radius:10px;padding:10px 16px;
+                  font-weight:700;font-size:15px;border:1px solid var(--border);margin-bottom:20px;">
+        ${profile.email}
+      </div>
+      <button class="btn btn-secondary"
+        onclick="sb().auth.signOut().then(()=>location.href='index.html')">
+        Se déconnecter
+      </button>
+    </div>
+  </div>`;
+}
