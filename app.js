@@ -313,7 +313,9 @@ window.switchToView=function(viewName){
     dashboard:{t:"Tableau de bord",s:"Vue rapide"},classes:{t:"Mes classes",s:"Créer, modifier"},
     eleves:{t:"Élèves",s:"Gérer tes élèves"},plan:{t:"Plan de salle",s:"Organiser ta classe"},
     evaluations:{t:"Évaluations & Quiz",s:"Créer et noter"},activites:{t:"Activités",s:"Devoirs et exercices"},
-    parents:{t:"Parents",s:"Communication"},messages:{t:"Messages",s:"Boîte de réception"}
+    parents:{t:"Parents",s:"Communication"},messages:{t:"Messages",s:"Boîte de réception"},
+    annonces:  { t: "Annonces",  s: "Informations & demandes d'accord" }
+
   };
   const i=titles[viewName]||{t:viewName,s:""};
   if($("#pageTitle"))    $("#pageTitle").textContent=i.t;
@@ -323,6 +325,7 @@ window.switchToView=function(viewName){
   if(viewName==="evaluations") loadEvaluations(currentTeacherId);
   if(viewName==="activites")   loadActivites(currentTeacherId);
   if(viewName==="plan")        checkFeature("salle",()=>loadPlanDeSalle(currentTeacherId));
+  if(viewName === "annonces") loadAnnonces(currentTeacherId);
 };
 async function loadUnreadMessages(tid){
   try{ const {count}=await sb().from("messages").select("id",{count:"exact",head:true}).eq("recipient_id",tid).eq("read",false);
@@ -1201,21 +1204,7 @@ async function checkQuota(type, tid) {
   return true;
 }
 
-async function checkQuota(type,tid){
-  const cfg={
-    classes:  {table:"classes",    col:"teacher_id",max:currentPlanData.maxClasses,  label:"classes"},
-    students: {table:"students",   col:"teacher_id",max:currentPlanData.maxStudents, label:"élèves"},
-    evals:    {table:"evaluations",col:"teacher_id",max:currentPlanData.maxEvals,    label:"évaluations"},
-    activites:{table:"activities", col:"teacher_id",max:currentPlanData.maxActivites,label:"activités"},
-  };
-  const c=cfg[type]; if(!c||c.max>=999) return true;
-  const {count}=await sb().from(c.table).select("id",{count:"exact",head:true}).eq(c.col,tid);
-  if(count>=c.max){
-    showUpgradeModal("quota",`Tu as atteint la limite de ${c.max} ${c.label} sur le plan Free.`);
-    return false;
-  }
-  return true;
-}
+
 
 
 // ============================================
@@ -1285,6 +1274,25 @@ function setupModalListeners(tid){
   $("#btnAddActivite")?.addEventListener("click",openActivite);
   ["btnCancelActivite","btnCancelActivite2"].forEach(id=>$("#"+id)?.addEventListener("click",()=>$("#modalActivite").classList.remove("show")));
   $("#btnSaveActivite")?.addEventListener("click",()=>saveActivite(tid));
+  
+  const openAnnonce = async () => {
+    await populateClassSelect("annonceClassId", tid, true);
+    if($("#annonceId"))       $("#annonceId").value      = "";
+    if($("#annonceTitle"))    $("#annonceTitle").value   = "";
+    if($("#annonceContent"))  $("#annonceContent").value = "";
+    if($("#annonceExpires"))  $("#annonceExpires").value = "";
+    switchAnnonceType("info");
+    toggleAnnonceTarget("all");
+    const box = $("#annonceCustomStudents");
+    if(box) box.innerHTML = '<p style="font-size:12px;color:var(--text-muted)">Sélectionne d\'abord une classe.</p>';
+    $("#modalAnnonce").classList.add("show");
+  };
+  $("#btnAddAnnonce")?.addEventListener("click", openAnnonce);
+    ["btnCancelAnnonce","btnCancelAnnonce2"].forEach(id =>
+    $("#"+id)?.addEventListener("click", () => $("#modalAnnonce").classList.remove("show"))
+  );
+  $("#btnSaveAnnonce")?.addEventListener("click", () => saveAnnonce(tid));
+
 
   // À binder dans setupModalListeners :
   $("#btnPinManager")?.addEventListener("click", () => openPinManager());
@@ -1367,6 +1375,282 @@ async function exportClassCodes() {
 
   } catch(e) { toast("Erreur", e.message, "error"); }
 }
+
+// ============================================
+// ANNONCES
+// ============================================
+let annonceCurrentType   = "info";
+let annonceCurrentTarget = "all";
+
+window.switchAnnonceType = function(type) {
+  annonceCurrentType = type;
+  $$("[data-atype]").forEach(b => b.classList.toggle("active", b.dataset.atype === type));
+};
+
+window.toggleAnnonceTarget = function(target) {
+  annonceCurrentTarget = target;
+  $$("[data-atarget]").forEach(b => b.classList.toggle("active", b.dataset.atarget === target));
+  const box = $("#annonceCustomStudents");
+  if(box) box.style.display = target === "custom" ? "block" : "none";
+  if(target === "custom") loadAnnonceStudentPicker();
+};
+
+window.onAnnonceClassChange = function() {
+  if(annonceCurrentTarget === "custom") loadAnnonceStudentPicker();
+};
+
+async function loadAnnonceStudentPicker() {
+  const classId = $("#annonceClassId")?.value;
+  const box = $("#annonceCustomStudents"); if(!box) return;
+  if(!classId) {
+    box.innerHTML = '<p style="font-size:12px;color:var(--text-muted)">Sélectionne d\'abord une classe.</p>';
+    return;
+  }
+  try {
+    const { data } = await sb().from("students")
+      .select("id, first_name, last_name")
+      .eq("class_id", classId).order("last_name");
+    if(!data?.length) {
+      box.innerHTML = '<p style="font-size:12px;color:var(--text-muted)">Aucun élève dans cette classe.</p>';
+      return;
+    }
+    box.innerHTML = data.map(s => `
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 4px;
+                    cursor:pointer;border-radius:6px;font-size:13px"
+        onmouseover="this.style.background='var(--bg-main)'"
+        onmouseout="this.style.background=''">
+        <input type="checkbox" class="annonce-student-check" data-id="${s.id}"
+          style="accent-color:var(--orange);width:15px;height:15px">
+        ${s.first_name} ${s.last_name}
+      </label>`).join('');
+  } catch(e) {}
+}
+
+async function saveAnnonce(tid) {
+  const title   = $("#annonceTitle")?.value.trim();
+  const content = $("#annonceContent")?.value.trim();
+  const classId = $("#annonceClassId")?.value || null;
+  const expires = $("#annonceExpires")?.value || null;
+  if(!title) { toast("Erreur", "Le titre est obligatoire.", "error"); return; }
+
+  let targetStudents = [];
+  if(annonceCurrentTarget === "custom") {
+    targetStudents = Array.from($$(".annonce-student-check:checked")).map(cb => cb.dataset.id);
+    if(!targetStudents.length) { toast("Erreur", "Sélectionne au moins un élève.", "error"); return; }
+  }
+
+  try {
+    const { data: ann, error } = await sb().from("announcements").insert({
+      teacher_id: tid, tenant_id: tid,
+      title,
+      content: content || null,
+      type: annonceCurrentType,
+      target: annonceCurrentTarget,
+      class_id: classId,
+      expires_at: expires || null
+    }).select().single();
+    if(error) throw error;
+
+    if(annonceCurrentTarget === "custom" && targetStudents.length) {
+      await sb().from("announcement_students").insert(
+        targetStudents.map(sid => ({ announcement_id: ann.id, student_id: sid }))
+      );
+    }
+
+    toast("✅ Publiée", "Annonce publiée avec succès !", "success");
+    $("#modalAnnonce").classList.remove("show");
+    await loadAnnonces(tid);
+  } catch(e) { toast("Erreur", e.message, "error"); }
+}
+
+async function loadAnnonces(tid) {
+  try {
+    const { data, error } = await sb()
+      .from("announcements")
+      .select(`*, classes(name),
+               announcement_students(student_id),
+               announcement_responses(student_id, approved)`)
+      .eq("teacher_id", tid)
+      .order("created_at", { ascending: false });
+    if(error) throw error;
+
+    const container = $("#annoncesList"); if(!container) return;
+    if(!data?.length) {
+      container.innerHTML = '<p class="panel-empty">Aucune annonce publiée.</p>';
+      return;
+    }
+
+    container.innerHTML = data.map(a => {
+      const isApproval  = a.type === "approval";
+      const total       = a.announcement_students?.length || 0;
+      const approved    = (a.announcement_responses||[]).filter(r => r.approved).length;
+      const notApproved = (a.announcement_responses||[]).filter(r => !r.approved).length;
+      const waiting     = total - approved - notApproved;
+
+      const typeLabel = isApproval
+        ? `<span style="background:#dcfce7;color:#16a34a;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700">✅ Accord requis</span>`
+        : `<span style="background:#dbeafe;color:#1d4ed8;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700">ℹ️ Info</span>`;
+
+      const targetLabel = a.target === "all"
+        ? `<span style="font-size:12px;color:var(--text-muted)">🏫 ${a.classes?.name || "Toutes les classes"}</span>`
+        : `<span style="font-size:12px;color:var(--text-muted)">🎯 ${total} élève(s) ciblé(s)</span>`;
+
+      const expiryLabel = a.expires_at
+        ? `<span style="font-size:12px;color:var(--text-muted)">⏳ Expire le ${new Date(a.expires_at).toLocaleDateString("fr-FR")}</span>`
+        : '';
+
+      const progressBar = isApproval && total > 0 ? `
+        <div style="margin-top:12px;padding:10px 12px;background:var(--bg-main);
+                    border-radius:8px;border:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span style="font-size:12px;font-weight:700">Réponses parents</span>
+            <span style="font-size:12px;color:var(--text-muted)">${approved} / ${total} accordés</span>
+          </div>
+          <div style="background:var(--border);border-radius:999px;height:8px;overflow:hidden">
+            <div style="background:#16a34a;height:100%;border-radius:999px;
+                        width:${Math.round(approved/total*100)}%;transition:width .3s"></div>
+          </div>
+          <div style="display:flex;gap:16px;margin-top:6px;font-size:11px">
+            <span style="color:#16a34a">✅ Accordé : <strong>${approved}</strong></span>
+            <span style="color:#f97316">⏳ En attente : <strong>${waiting < 0 ? 0 : waiting}</strong></span>
+            ${notApproved > 0 ? `<span style="color:#dc2626">❌ Refusé : <strong>${notApproved}</strong></span>` : ''}
+          </div>
+        </div>` : '';
+
+      return `
+        <div class="list-item" style="flex-direction:column;align-items:flex-start;gap:8px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;width:100%;gap:8px">
+            <div style="flex:1">
+              <div style="font-weight:700;font-size:15px;margin-bottom:4px">${a.title}</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                ${typeLabel} ${targetLabel} ${expiryLabel}
+              </div>
+              ${a.content ? `<div style="font-size:13px;color:var(--text-muted);margin-top:6px;line-height:1.5">${a.content}</div>` : ''}
+              ${progressBar}
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <button class="btn btn-secondary" style="font-size:12px;padding:5px 10px"
+                onclick="viewAnnonceDetail('${a.id}')">👁 Détail</button>
+              <button class="btn" style="font-size:12px;padding:5px 10px;background:#ef4444"
+                onclick="deleteAnnonce('${a.id}')">🗑</button>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted)">
+            Publiée le ${new Date(a.created_at).toLocaleDateString("fr-FR")}
+          </div>
+        </div>`;
+    }).join('');
+  } catch(e) { toast("Erreur", e.message, "error"); }
+}
+
+window.deleteAnnonce = async function(id) {
+  if(!confirm("Supprimer cette annonce ?")) return;
+  try {
+    await sb().from("announcements").delete().eq("id", id);
+    toast("Supprimé", "✅", "success");
+    await loadAnnonces(currentTeacherId);
+  } catch(e) { toast("Erreur", e.message, "error"); }
+};
+
+window.viewAnnonceDetail = async function(id) {
+  try {
+    const { data: a } = await sb()
+      .from("announcements")
+      .select(`*, classes(name),
+               announcement_students(student_id, students(first_name, last_name)),
+               announcement_responses(student_id, approved, responded_at,
+                 students(first_name, last_name))`)
+      .eq("id", id).single();
+    if(!a) return;
+
+    document.getElementById("annonceDetailModal")?.remove();
+    const modal = document.createElement("div");
+    modal.className = "modal show";
+    modal.id = "annonceDetailModal";
+
+    const responses    = a.announcement_responses || [];
+    const approvedList = responses.filter(r => r.approved);
+    const refusedList  = responses.filter(r => !r.approved);
+    const targeted     = a.announcement_students || [];
+    const respondedIds = new Set(responses.map(r => r.student_id));
+    const pendingList  = targeted.filter(ts => !respondedIds.has(ts.student_id));
+
+    const mkList = (arr, icon, nameKey = "students") => arr.length
+      ? arr.map(r => `
+          <div style="padding:6px 10px;font-size:13px;border-bottom:1px solid var(--border)">
+            ${icon} ${r[nameKey]?.first_name || ''} ${r[nameKey]?.last_name || ''}
+            ${r.responded_at
+              ? `<span style="font-size:11px;color:var(--text-muted);float:right">
+                   ${new Date(r.responded_at).toLocaleDateString("fr-FR")}</span>`
+              : ''}
+          </div>`).join('')
+      : `<p style="font-size:12px;color:var(--text-muted);padding:8px">Aucun</p>`;
+
+    modal.innerHTML = `
+      <div class="modal-content" style="max-width:560px">
+        <div class="modal-header">
+          <div>
+            <h2>📢 ${a.title}</h2>
+            <p style="font-size:12px;color:var(--text-muted);margin-top:2px">
+              ${a.type === "approval" ? "✅ Demande d'accord" : "ℹ️ Information"}
+              &nbsp;•&nbsp; ${a.classes?.name || "Toutes les classes"}
+            </p>
+          </div>
+          <button class="modal-close"
+            onclick="document.getElementById('annonceDetailModal').remove()">✕</button>
+        </div>
+        <div class="modal-body" style="padding:0;gap:0">
+          ${a.content
+            ? `<div style="padding:14px 16px;border-bottom:1px solid var(--border);
+                           font-size:14px;color:var(--text-muted);line-height:1.6">
+                 ${a.content}
+               </div>`
+            : ''}
+          ${a.type === "approval" ? `
+            <div style="padding:14px 16px">
+              <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#16a34a">
+                ✅ Accordé (${approvedList.length})
+              </div>
+              <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">
+                ${mkList(approvedList, "✅")}
+              </div>
+              <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#f97316">
+                ⏳ En attente (${pendingList.length})
+              </div>
+              <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">
+                ${mkList(pendingList, "⏳")}
+              </div>
+              ${refusedList.length ? `
+                <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#dc2626">
+                  ❌ Refusé (${refusedList.length})
+                </div>
+                <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+                  ${mkList(refusedList, "❌")}
+                </div>` : ''}
+            </div>` : `
+            <div style="padding:14px 16px">
+              <div style="font-weight:700;font-size:13px;margin-bottom:8px">
+                👥 Élèves ciblés (${targeted.length || "tous"})
+              </div>
+              ${targeted.length
+                ? `<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+                     ${targeted.map(ts => `
+                       <div style="padding:6px 10px;font-size:13px;border-bottom:1px solid var(--border)">
+                         👤 ${ts.students?.first_name||''} ${ts.students?.last_name||''}
+                       </div>`).join('')}
+                   </div>`
+                : `<p style="font-size:12px;color:var(--text-muted)">Toute la classe</p>`}
+            </div>`}
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary"
+            onclick="document.getElementById('annonceDetailModal').remove()">Fermer</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(modal);
+  } catch(e) { toast("Erreur", e.message, "error"); }
+};
 
 
 // ============================================
