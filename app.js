@@ -1238,55 +1238,38 @@ function setupModalListeners(tid){
   ["btnCancelClass","btnCancelClass2"].forEach(id=>$("#"+id)?.addEventListener("click",()=>$("#modalClass").classList.remove("show")));
   $("#btnSaveClass")?.addEventListener("click",()=>saveClass(tid));
 
-  const openEleve=async()=>{ await populateClassSelect("eleveClassId",tid,false); if($("#eleveFirstName")) $("#eleveFirstName").value=""; if($("#eleveLastName")) $("#eleveLastName").value=""; if($("#eleveParentEmail"))  $("#eleveParentEmail").value  = ""; $("#modalEleve").classList.add("show"); };
+  const openEleve = () => { if($("#eleveFirstName"))    $("#eleveFirstName").value = ""; if($("#eleveLastName"))     $("#eleveLastName").value  = ""; if($("#eleveParentEmail"))  $("#eleveParentEmail").value = ""; $("#modalEleve").classList.add("show"); populateClassSelect("eleveClassId", tid, false); };
   $("#btnAddEleve")?.addEventListener("click",openEleve);
   $("#btnAddEleve2")?.addEventListener("click", openEleve);
   ["btnCancelEleve","btnCancelEleve2"].forEach(id=>$("#"+id)?.addEventListener("click",()=>$("#modalEleve").classList.remove("show")));
   $("#btnSaveEleve")?.addEventListener("click",()=>saveEleve(tid));
   ["btnCloseFiche"].forEach(id=>$("#"+id)?.addEventListener("click",()=>$("#modalFicheEleve").classList.remove("show")));
 
-  const openEval=async()=>{
-    await populateClassSelect("evalClassId",tid,false);
-    switchEvalTemplate("standard"); if($("#evalId")) $("#evalId").value="";
-    if($("#modalEvalTitle")) $("#modalEvalTitle").textContent="Créer une évaluation";
-    ["evalTitle","evalSubject","evalDate","evalExpiresAt"].forEach(i=>{const el=$("#"+i);if(el)el.value="";});
-    if($("#evalMaxScore")) $("#evalMaxScore").value="20";
-    evalCurrentAssignees="class"; toggleAssignment("class");
-    if($("#customAssignees")) $("#customAssignees").innerHTML="";
-    quizQuestions=[];
-    $("#modalEval").classList.add("show");
+  const openEval = () => {
+    switchEvalTemplate("standard");
+    if(evalId) evalId.value = "";
+    if(modalEvalTitle) modalEvalTitle.textContent = "Créer une évaluation";
+    [evalTitle, evalSubject, evalDate, evalExpiresAt].forEach(el => { if(el) el.value = ""; });
+    if(evalMaxScore) evalMaxScore.value = 20;
+    evalCurrentAssignees = "class";
+    toggleAssignment("class");
+    if(customAssignees) customAssignees.innerHTML = "";
+    quizQuestions = [];
+    modalEval.classList.add("show");
+    populateClassSelect("evalClassId", tid, false); // ← arrière-plan
   };
+
   $("#btnAddEval")?.addEventListener("click",openEval); $("#btnAddEvalDash")?.addEventListener("click",openEval);
   ["btnCancelEval","btnCancelEval2"].forEach(id=>$("#"+id)?.addEventListener("click",()=>$("#modalEval").classList.remove("show")));
   $("#btnSaveEval")?.addEventListener("click",()=>saveEvaluation(tid));
   $("#evalClassId")?.addEventListener("change",async function(){ if(evalCurrentAssignees==="custom"&&this.value) await loadCustomAssignees(this.value); });
 
-  const openActivite=async()=>{
-    await populateClassSelect("activiteClassId",tid,false);
-    document.getElementById("activiteId").value="";
-    document.getElementById("activiteTitle").value="";
-    document.getElementById("activiteDescription").value="";
-    document.getElementById("activiteInstructions").value="";
-    if(document.getElementById("activiteStatus")) document.getElementById("activiteStatus").value="assigned";
-    if(document.getElementById("modalActiviteTitle")) document.getElementById("modalActiviteTitle").textContent="Créer une activité";
-    $("#modalActivite").classList.add("show");
-  };
+  const openActivite = () => { document.getElementById("activiteId").value = ""; document.getElementById("activiteTitle").value = ""; document.getElementById("activiteDescription").value = ""; document.getElementById("activiteInstructions").value = ""; if(document.getElementById("activiteStatus"))      document.getElementById("activiteStatus").value = "assigned"; if(document.getElementById("modalActiviteTitle"))  document.getElementById("modalActiviteTitle").textContent = "Créer une activité"; $("#modalActivite").classList.add("show"); populateClassSelect("activiteClassId", tid, false); };
   $("#btnAddActivite")?.addEventListener("click",openActivite);
   ["btnCancelActivite","btnCancelActivite2"].forEach(id=>$("#"+id)?.addEventListener("click",()=>$("#modalActivite").classList.remove("show")));
   $("#btnSaveActivite")?.addEventListener("click",()=>saveActivite(tid));
   
-  const openAnnonce = async () => {
-    await populateClassSelect("annonceClassId", tid, true);
-    if($("#annonceId"))       $("#annonceId").value      = "";
-    if($("#annonceTitle"))    $("#annonceTitle").value   = "";
-    if($("#annonceContent"))  $("#annonceContent").value = "";
-    if($("#annonceExpires"))  $("#annonceExpires").value = "";
-    switchAnnonceType("info");
-    toggleAnnonceTarget("all");
-    const box = $("#annonceCustomStudents");
-    if(box) box.innerHTML = '<p style="font-size:12px;color:var(--text-muted)">Sélectionne d\'abord une classe.</p>';
-    $("#modalAnnonce").classList.add("show");
-  };
+  const openAnnonce = () => { if($("#annonceId"))      $("#annonceId").value      = ""; if($("#annonceTitle"))   $("#annonceTitle").value   = ""; if($("#annonceContent")) $("#annonceContent").value = ""; if($("#annonceExpires")) $("#annonceExpires").value = ""; switchAnnonceType("info"); toggleAnnonceTarget("all"); const box = $("#annonceCustomStudents"); if(box) box.innerHTML = '<p style="font-size:12px;color:var(--text-muted)">Sélectionne d\'abord une classe.</p>'; $("#modalAnnonce").classList.add("show"); populateClassSelect("annonceClassId", tid, true); };
   $("#btnAddAnnonce")?.addEventListener("click", openAnnonce);
     ["btnCancelAnnonce","btnCancelAnnonce2"].forEach(id =>
     $("#"+id)?.addEventListener("click", () => $("#modalAnnonce").classList.remove("show"))
