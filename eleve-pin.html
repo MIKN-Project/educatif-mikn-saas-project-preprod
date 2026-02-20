@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Espace Élève - Educatif MIKN</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <!-- PAGE CONNEXION PIN -->
+  <div class="login-wrapper" id="loginWrapper">
+    <div class="login-card">
+
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+        <button id="themeBtn" class="btn-icon">🌙</button>
+      </div>
+
+      <div style="text-align:center;margin-bottom:28px">
+        <div class="login-logo-icon" style="width:56px;height:56px;border-radius:16px;font-size:24px;font-weight:900;margin:0 auto 12px">M</div>
+        <h1 style="font-size:20px;font-weight:800;margin:0">Espace Élève</h1>
+        <p style="color:var(--text-muted);font-size:13px;margin-top:4px">Educatif MIKN</p>
+      </div>
+
+      <div style="background:var(--bg-main);border-radius:12px;padding:12px 16px;margin-bottom:20px;
+           font-size:13px;color:var(--text-muted);text-align:center;line-height:1.8">
+        🏫 Demande le <strong>code de ta classe</strong> à ton prof<br>
+        puis entre ton <strong>code PIN</strong> personnel
+      </div>
+
+      <div class="form-group">
+        <label>Code de la classe</label>
+        <input type="text" id="classCode" class="input" placeholder="Ex : CE2A01"
+          autocomplete="off"
+          style="text-transform:uppercase;font-size:18px;letter-spacing:3px;text-align:center;font-weight:700">
+      </div>
+      <div class="form-group">
+        <label>Mon code PIN</label>
+        <input type="password" id="pinCode" class="input" placeholder="••••"
+          maxlength="6" inputmode="numeric" pattern="[0-9]*"
+          style="font-size:26px;letter-spacing:8px;text-align:center;font-weight:700">
+      </div>
+
+      <button id="loginPinBtn" class="btn" style="width:100%;margin-top:4px;font-size:16px">
+        Accéder à mon espace →
+      </button>
+
+      <div style="text-align:center;margin-top:16px">
+        <a href="index.html" style="font-size:13px;color:var(--text-muted)">
+          ← Connexion professeur
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ESPACE ÉLÈVE (affiché après connexion PIN) -->
+  <div id="espaceEleve" style="display:none">
+
+    <header class="header">
+      <div class="header-title">
+        <h1 id="eleveWelcome">Bonjour !</h1>
+        <p id="eleveClassName" style="font-size:13px;color:var(--text-muted)"></p>
+      </div>
+      <div class="header-actions">
+        <button id="themeBtn2" class="btn-icon">🌙</button>
+        <button id="logoutPinBtn" class="btn btn-secondary">Quitter</button>
+      </div>
+    </header>
+
+    <div style="max-width:800px;margin:28px auto;padding:0 20px">
+
+      <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+        <button class="template-tab active" id="etabBtnActivites"
+          onclick="switchEleveTab('activites')">✏️ Activités</button>
+        <button class="template-tab" id="etabBtnNotes"
+          onclick="switchEleveTab('notes')">📝 Mes notes</button>
+        <button class="template-tab" id="etabBtnQuiz"
+          onclick="switchEleveTab('quiz')">🧠 Quiz</button>
+      </div>
+
+      <div id="etab-activites">
+        <div class="panel">
+          <div class="panel-header"><h2>✏️ Mes activités</h2></div>
+          <div id="eleveActivitesList"><p class="panel-empty">Aucune activité assignée.</p></div>
+        </div>
+      </div>
+
+      <div id="etab-notes" style="display:none">
+        <div class="panel">
+          <div class="panel-header"><h2>📝 Mes notes</h2></div>
+          <div id="eleveNotesList"><p class="panel-empty">Aucune note enregistrée.</p></div>
+        </div>
+      </div>
+
+      <div id="etab-quiz" style="display:none">
+        <div class="panel">
+          <div class="panel-header"><h2>🧠 Mes quiz</h2></div>
+          <div id="eleveQuizList"><p class="panel-empty">Aucun quiz disponible.</p></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="toast" class="toast"><strong id="toastTitle"></strong><p id="toastMsg"></p></div>
+
+  <script src="app.js"></script>
+  <script>
+  let pinStudent = null;
+
+  document.addEventListener("DOMContentLoaded", () => {
+    applyTheme();
+    document.getElementById("themeBtn")?.addEventListener("click", toggleTheme);
+    document.getElementById("themeBtn2")?.addEventListener("click", toggleTheme);
+    document.getElementById("loginPinBtn")?.addEventListener("click", loginPin);
+    document.getElementById("pinCode")?.addEventListener("keydown", e => { if(e.key==="Enter") loginPin(); });
+    document.getElementById("logoutPinBtn")?.addEventListener("click", () => {
+      sessionStorage.removeItem("mcv_pin_student");
+      location.reload();
+    });
+    // Restaurer session si déjà connecté
+    const saved = sessionStorage.getItem("mcv_pin_student");
+    if(saved){ try{ pinStudent=JSON.parse(saved); showEleveSpace(); }catch(e){} }
+  });
+
+  async function loginPin(){
+    const code = (document.getElementById("classCode").value||"").trim().toUpperCase();
+    const pin  = (document.getElementById("pinCode").value||"").trim();
+    if(!code||!pin){ toast("Requis","Code classe et PIN obligatoires","error"); return; }
+    const btn=document.getElementById("loginPinBtn");
+    btn.disabled=true; btn.textContent="Vérification…";
+    try{
+      // 1. Trouver la classe
+      const {data:cls}=await sb().from("classes")
+        .select("id,name,teacher_id").eq("class_code",code).maybeSingle();
+      if(!cls){ toast("Introuvable","Code de classe incorrect.","error"); return; }
+      // 2. Trouver l'élève par PIN
+      const {data:stu}=await sb().from("students")
+        .select("id,first_name,last_name,class_id,teacher_id")
+        .eq("class_id",cls.id).eq("pin_code",pin).eq("pin_enabled",true).maybeSingle();
+      if(!stu){ toast("PIN incorrect","Vérifie ton code PIN.","error"); return; }
+      // 3. Session locale (pas d'auth Supabase — RLS via teacher_id)
+      pinStudent={
+        id:stu.id, firstName:stu.first_name, lastName:stu.last_name,
+        classId:cls.id, className:cls.name, teacherId:stu.teacher_id
+      };
+      sessionStorage.setItem("mcv_pin_student", JSON.stringify(pinStudent));
+      showEleveSpace();
+    }catch(e){ toast("Erreur",e.message||String(e),"error"); }
+    finally{ btn.disabled=false; btn.textContent="Accéder à mon espace →"; }
+  }
+
+  function showEleveSpace(){
+    document.getElementById("loginWrapper").style.display="none";
+    document.getElementById("espaceEleve").style.display="block";
+    document.getElementById("eleveWelcome").textContent="Bonjour "+pinStudent.firstName+" !";
+    document.getElementById("eleveClassName").textContent="Classe : "+pinStudent.className;
+    loadEleveActivites();
+  }
+
+  function switchEleveTab(tab){
+    ["activites","notes","quiz"].forEach(t=>{
+      document.getElementById("etab-"+t).style.display=t===tab?"block":"none";
+    });
+    // Tabs actifs
+    ["activites","notes","quiz"].forEach(t=>{
+      document.getElementById("etabBtn"+t.charAt(0).toUpperCase()+t.slice(1))
+        ?.classList.toggle("active",t===tab);
+    });
+    if(tab==="notes") loadEleveNotes();
+    if(tab==="quiz")  loadEleveQuiz();
+  }
+
+  async function loadEleveActivites(){
+    const list=document.getElementById("eleveActivitesList");
+    try{
+      const {data}=await sb().from("activities")
+        .select("*").eq("class_id",pinStudent.classId).order("due_date",{ascending:true});
+      if(!data?.length){ list.innerHTML='<p class="panel-empty">Aucune activité assignée.</p>'; return; }
+      const statusLabel={assigned:"📤 Assignée",in_progress:"⏳ En cours",submitted:"✅ Rendue",late:"⚠️ En retard"};
+      list.innerHTML=data.map(a=>`<div class="list-item">
+        <div>
+          <div style="font-weight:700">${a.title}</div>
+          <div style="font-size:13px;color:var(--text-muted)">${a.description||''}</div>
+          ${a.due_date?`<div style="font-size:12px;color:#f97316;margin-top:2px">📅 ${new Date(a.due_date).toLocaleDateString('fr-FR')}</div>`:''}
+        </div>
+        <span style="font-size:12px">${statusLabel[a.status]||a.status||''}</span>
+      </div>`).join('');
+    }catch(e){ list.innerHTML='<p class="panel-empty">Erreur de chargement.</p>'; }
+  }
+
+  async function loadEleveNotes(){
+    const list=document.getElementById("eleveNotesList");
+    try{
+      const {data}=await sb().from("grades")
+        .select("*,evaluations(title,subject,max_score)")
+        .eq("student_id",pinStudent.id).order("created_at",{ascending:false});
+      if(!data?.length){ list.innerHTML='<p class="panel-empty">Aucune note enregistrée.</p>'; return; }
+      list.innerHTML=`<table class="table">
+        <thead><tr><th>Évaluation</th><th>Matière</th><th>Note</th></tr></thead>
+        <tbody>${data.map(g=>`<tr>
+          <td>${g.evaluations?.title||g.title||'—'}</td>
+          <td><span class="badge-blue">${g.evaluations?.subject||g.subject||'—'}</span></td>
+          <td><strong>${g.score}</strong> / ${g.evaluations?.max_score||20}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    }catch(e){ list.innerHTML='<p class="panel-empty">Erreur de chargement.</p>'; }
+  }
+
+  async function loadEleveQuiz(){
+    const list=document.getElementById("eleveQuizList");
+    try{
+      const {data}=await sb().from("evaluations")
+        .select("*").eq("class_id",pinStudent.classId).eq("eval_type","quiz")
+        .order("eval_date",{ascending:false});
+      if(!data?.length){ list.innerHTML='<p class="panel-empty">Aucun quiz disponible.</p>'; return; }
+      list.innerHTML=data.map(q=>`<div class="list-item">
+        <div>
+          <div style="font-weight:700">🧠 ${q.title}</div>
+          <div style="font-size:13px;color:var(--text-muted)">${q.subject||''}</div>
+        </div>
+        <span style="font-size:12px;color:var(--text-muted)">
+          ${q.eval_date?new Date(q.eval_date).toLocaleDateString('fr-FR'):''}
+        </span>
+      </div>`).join('');
+    }catch(e){ list.innerHTML='<p class="panel-empty">Erreur de chargement.</p>'; }
+  }
+  </script>
+</body>
+</html>
