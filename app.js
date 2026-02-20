@@ -522,13 +522,14 @@ async function deleteEleve(id){
   }catch(e){toast("Erreur",e.message,"error");}
 }
 async function saveEleve(tid){
-  const fn=$("#eleveFirstName").value.trim(), ln=$("#eleveLastName").value.trim(), cid=$("#eleveClassId").value;
+  const fn=$("#eleveFirstName").value.trim(), ln=$("#eleveLastName").value.trim(), cid=$("#eleveClassId").value, parentEmail = $("#eleveParentEmail")?.value.trim() || null;
   if(!fn||!ln){toast("Erreur","Prénom et nom requis","error");return;}
   if(!(await checkQuota("students",tid))) return;
   try{
     await sb().from("students").insert({
       first_name:fn, last_name:ln, class_id:cid||null,
       teacher_id:tid, tenant_id:tid,
+      parent_email: parentEmail,
       pin_code:generatePin(4), pin_enabled:false
     });
     $("#modalEleve").classList.remove("show");
@@ -1248,7 +1249,7 @@ function setupModalListeners(tid){
   ["btnCancelClass","btnCancelClass2"].forEach(id=>$("#"+id)?.addEventListener("click",()=>$("#modalClass").classList.remove("show")));
   $("#btnSaveClass")?.addEventListener("click",()=>saveClass(tid));
 
-  const openEleve=async()=>{ await populateClassSelect("eleveClassId",tid,false); if($("#eleveFirstName")) $("#eleveFirstName").value=""; if($("#eleveLastName")) $("#eleveLastName").value=""; $("#modalEleve").classList.add("show"); };
+  const openEleve=async()=>{ await populateClassSelect("eleveClassId",tid,false); if($("#eleveFirstName")) $("#eleveFirstName").value=""; if($("#eleveLastName")) $("#eleveLastName").value=""; if($("#eleveParentEmail"))  $("#eleveParentEmail").value  = ""; $("#modalEleve").classList.add("show"); };
   $("#btnAddEleve")?.addEventListener("click",openEleve);
   $("#btnAddEleve2")?.addEventListener("click", openEleve);
   ["btnCancelEleve","btnCancelEleve2"].forEach(id=>$("#"+id)?.addEventListener("click",()=>$("#modalEleve").classList.remove("show")));
