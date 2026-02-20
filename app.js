@@ -42,7 +42,10 @@ function toggleTheme(){
 }
 
 // ✅ FIX 1 — null au lieu de "index.html" pour éviter la boucle infinie
-function roleHome(r){ return {admin:"admin.html",teacher:"prof.html",parent:"parent.html"}[r]||null; }
+function roleHome(r){
+  return {admin:"admin.html", teacher:"prof.html", parent:"parent.html", student:"eleve.html"}[r]||null;
+}
+
 
 function sbEnabled(){ return !!(SUPABASE_URL&&SUPABASE_ANON_KEY&&window.supabase); }
 function sb(){
