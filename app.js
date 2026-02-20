@@ -1286,84 +1286,212 @@ function setupModalListeners(tid){
   $("#btnSaveActivite")?.addEventListener("click",()=>saveActivite(tid));
 
   // À binder dans setupModalListeners :
-  $("#btnExportPins")?.addEventListener("click", exportPinsClasse);
-
-  async function exportPinsClasse() {
-    const classId = $("#filterClass")?.value;
-    if(!classId) {
-      toast("Sélectionne une classe", "Filtre d'abord par classe pour exporter ses PIN.", "error");
-      return;
-    }
-    try {
-      const [{ data: cls }, { data: students }] = await Promise.all([
-        sb().from("classes").select("name, class_code").eq("id", classId).maybeSingle(),
-        sb().from("students")
-          .select("first_name, last_name, pin_code, pin_enabled")
-          .eq("class_id", classId)
-          .eq("pin_enabled", true)
-          .order("last_name")
-      ]);
-
-      if(!students?.length) {
-        toast("Aucun PIN actif", "Active d'abord les PIN des élèves de cette classe.", "error");
-        return;
-      }
-
-      // Génère une page imprimable dans un nouvel onglet
-      const rows = students.map(s => `
-        <tr>
-          <td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;font-weight:600">
-            ${s.first_name} ${s.last_name}
-          </td>
-          <td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;font-family:monospace;
-                    font-size:18px;font-weight:800;letter-spacing:4px;color:#f97316">
-            ${cls?.class_code || "—"}
-          </td>
-          <td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;font-family:monospace;
-                    font-size:22px;font-weight:900;letter-spacing:6px;color:#1e40af">
-            ${s.pin_code || "—"}
-          </td>
-        </tr>`).join("");
-
-      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-        <title>Codes PIN — ${cls?.name || ""}</title>
-        <style>
-          body { font-family: sans-serif; padding: 30px; }
-          h1   { font-size: 22px; margin-bottom: 4px; }
-          p    { color: #6b7280; font-size: 14px; margin-bottom: 24px; }
-          table { width: 100%; border-collapse: collapse; }
-          th   { text-align:left; padding: 10px 14px; background: #f3f4f6;
-                font-size: 12px; text-transform: uppercase; color: #6b7280; }
-          @media print { button { display:none } }
-        </style></head><body>
-        <h1>🔑 Codes PIN — ${cls?.name || "Classe"}</h1>
-        <p>Code classe : <strong style="font-family:monospace;font-size:16px;
-          letter-spacing:3px;color:#f97316">${cls?.class_code || "—"}</strong>
-          &nbsp;•&nbsp; Page de connexion : <strong>eleve-pin.html</strong>
-        </p>
-        <table>
-          <thead><tr>
-            <th>Élève</th><th>Code classe</th><th>PIN personnel</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-        <br>
-        <button onclick="window.print()"
-          style="padding:10px 20px;background:#f97316;color:#fff;border:none;
-                border-radius:8px;font-size:14px;cursor:pointer">
-          🖨️ Imprimer
-        </button>
-      </body></html>`;
-
-      const w = window.open("", "_blank");
-      w.document.write(html);
-      w.document.close();
-
-    } catch(e) { toast("Erreur", e.message, "error"); }
-  }
+  $("#btnPinManager")?.addEventListener("click", () => openPinManager());
 
 
 }
+
+// ============================================
+// GESTION PIN EN MASSE
+// ============================================
+window.openPinManager = async function() {
+  const classId = $("#filterClass")?.value;
+  if(!classId) {
+    toast("Sélectionne une classe", "Filtre d'abord par classe pour gérer les PIN.", "error");
+    return;
+  }
+  try {
+    const [{ data: cls }, { data: students }] = await Promise.all([
+      sb().from("classes").select("name, class_code").eq("id", classId).maybeSingle(),
+      sb().from("students")
+        .select("id, first_name, last_name, pin_code, pin_enabled")
+        .eq("class_id", classId)
+        .order("last_name")
+    ]);
+    if(!students?.length) { toast("Aucun élève", "Cette classe n'a pas d'élèves.", "error"); return; }
+
+    document.getElementById("modalPinManager")?.remove();
+    const modal = document.createElement("div");
+    modal.className = "modal show";
+    modal.id = "modalPinManager";
+
+    const rows = students.map(s => `
+      <tr id="pinrow-${s.id}">
+        <td style="padding:8px 10px">
+          <input type="checkbox" class="pin-check" data-id="${s.id}"
+            style="accent-color:var(--orange);width:16px;height:16px" checked>
+        </td>
+        <td style="padding:8px 10px;font-weight:600">${s.first_name} ${s.last_name}</td>
+        <td style="padding:8px 10px;text-align:center" id="pinstatus-${s.id}">
+          ${s.pin_enabled
+            ? `<span style="background:#dcfce7;color:#16a34a;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700">✅ Actif</span>`
+            : `<span style="background:#fee2e2;color:#dc2626;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700">❌ Inactif</span>`}
+        </td>
+        <td style="padding:8px 10px;font-family:monospace;font-size:20px;font-weight:900;
+                   letter-spacing:5px;color:#1e40af;text-align:center" id="pincell-${s.id}">
+          ${s.pin_enabled && s.pin_code ? s.pin_code : '—'}
+        </td>
+      </tr>`).join('');
+
+    modal.innerHTML = `
+      <div class="modal-content" style="max-width:620px">
+        <div class="modal-header">
+          <div>
+            <h2>🔑 Gestion des PIN</h2>
+            <p style="font-size:13px;color:var(--text-muted);margin-top:2px">
+              ${cls?.name} — Code classe :
+              <strong style="font-family:monospace;color:var(--orange);letter-spacing:3px;font-size:15px">
+                ${cls?.class_code || '—'}
+              </strong>
+              <button onclick="navigator.clipboard.writeText('${cls?.class_code||''}').then(()=>toast('Copié !','Code classe copié 📋','success'))"
+                style="margin-left:8px;background:none;border:1.5px solid var(--border);
+                       border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer">📋 Copier</button>
+            </p>
+          </div>
+          <button class="modal-close" onclick="document.getElementById('modalPinManager').remove()">✕</button>
+        </div>
+        <div class="modal-body" style="padding:0">
+
+          <!-- Barre d'actions -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;
+                      border-bottom:1px solid var(--border);background:var(--bg-main)">
+            <button onclick="pinSelectAll(true)"  class="btn btn-secondary" style="font-size:12px;padding:5px 10px">☑ Tout</button>
+            <button onclick="pinSelectAll(false)" class="btn btn-secondary" style="font-size:12px;padding:5px 10px">☐ Aucun</button>
+            <button onclick="pinGenerateSelected()" class="btn" style="font-size:12px;padding:5px 14px;background:#16a34a">
+              🔄 Générer PIN sélectionnés
+            </button>
+            <button onclick="pinExportPrint()" class="btn" style="font-size:12px;padding:5px 14px;background:#1d4ed8">
+              🖨️ Exporter / Imprimer
+            </button>
+          </div>
+
+          <!-- Tableau -->
+          <div style="max-height:400px;overflow-y:auto">
+            <table style="width:100%;border-collapse:collapse">
+              <thead style="position:sticky;top:0;background:var(--bg-card);z-index:1">
+                <tr style="border-bottom:2px solid var(--border)">
+                  <th style="padding:8px 10px;width:40px"></th>
+                  <th style="padding:8px 10px;text-align:left;font-size:12px;color:var(--text-muted)">ÉLÈVE</th>
+                  <th style="padding:8px 10px;text-align:center;font-size:12px;color:var(--text-muted)">STATUT</th>
+                  <th style="padding:8px 10px;text-align:center;font-size:12px;color:var(--text-muted)">PIN</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <span style="font-size:12px;color:var(--text-muted)">
+            💡 Le PIN est permanent sauf si tu le regénères manuellement
+          </span>
+          <button class="btn btn-secondary" onclick="document.getElementById('modalPinManager').remove()">Fermer</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(modal);
+    // Stocke les données pour l'export
+    window.__pinStudents  = students;
+    window.__pinClassCode = cls?.class_code || '';
+    window.__pinClassName = cls?.name || '';
+
+  } catch(e) { toast("Erreur", e.message, "error"); }
+};
+
+window.pinSelectAll = function(checked) {
+  document.querySelectorAll('.pin-check').forEach(cb => cb.checked = checked);
+};
+
+window.pinGenerateSelected = async function() {
+  const selected = Array.from(document.querySelectorAll('.pin-check:checked')).map(cb => cb.dataset.id);
+  if(!selected.length) { toast("Aucun élève sélectionné", "Coche au moins un élève.", "error"); return; }
+
+  let done = 0;
+  for(const id of selected) {
+    const newPin = generatePin(4);
+    try {
+      await sb().from("students").update({ pin_code: newPin, pin_enabled: true }).eq("id", id);
+      // Mise à jour visuelle immédiate
+      const cell   = document.getElementById(`pincell-${id}`);
+      const status = document.getElementById(`pinstatus-${id}`);
+      if(cell)   cell.textContent = newPin;
+      if(status) status.innerHTML = `<span style="background:#dcfce7;color:#16a34a;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700">✅ Actif</span>`;
+      // Met à jour le cache local
+      const s = (window.__pinStudents||[]).find(st => st.id === id);
+      if(s) { s.pin_code = newPin; s.pin_enabled = true; }
+      done++;
+    } catch(e) { console.error(e); }
+  }
+  toast("✅ PIN générés", `${done} élève(s) mis à jour`, "success");
+  await loadElevesList(currentTeacherId);
+};
+
+window.pinExportPrint = function() {
+  const students = (window.__pinStudents || []).filter(s => s.pin_enabled && s.pin_code);
+  if(!students.length) {
+    toast("Aucun PIN actif", "Génère d'abord les PIN avec le bouton vert.", "error");
+    return;
+  }
+  const classCode = window.__pinClassCode || '—';
+  const className = window.__pinClassName || 'Classe';
+
+  const rows = students.map(s => `
+    <tr>
+      <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:15px">
+        ${s.first_name} ${s.last_name}
+      </td>
+      <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;font-family:monospace;
+                 font-size:20px;font-weight:900;letter-spacing:5px;color:#f97316;text-align:center">
+        ${classCode}
+      </td>
+      <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;font-family:monospace;
+                 font-size:28px;font-weight:900;letter-spacing:8px;color:#1d4ed8;text-align:center">
+        ${s.pin_code}
+      </td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<title>Codes PIN — ${className}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',sans-serif;padding:32px;color:#111}
+  .top{border-bottom:3px solid #f97316;padding-bottom:14px;margin-bottom:24px}
+  h1{font-size:22px;font-weight:800;margin-bottom:8px}
+  .cc{font-family:monospace;font-size:22px;font-weight:900;color:#f97316;
+      letter-spacing:4px;background:#fff7ed;padding:4px 14px;border-radius:8px;
+      border:2px solid #fed7aa}
+  .meta{font-size:13px;color:#6b7280;margin-top:6px}
+  table{width:100%;border-collapse:collapse}
+  th{background:#f3f4f6;padding:10px 16px;text-align:left;font-size:11px;
+     text-transform:uppercase;color:#6b7280;letter-spacing:1px}
+  th:not(:first-child){text-align:center}
+  tr:nth-child(even){background:#f9fafb}
+  .btn{margin-top:24px;padding:12px 28px;background:#f97316;color:#fff;
+       border:none;border-radius:10px;font-size:15px;cursor:pointer;font-weight:700}
+  .note{margin-top:14px;font-size:11px;color:#9ca3af;font-style:italic}
+  @media print{.btn,.note{display:none}}
+</style></head><body>
+<div class="top">
+  <h1>🔑 Codes PIN — ${className}</h1>
+  <span class="cc">${classCode}</span>
+  <div class="meta">Page de connexion : <strong>eleve-pin.html</strong> &nbsp;•&nbsp; ${students.length} élève(s)</div>
+</div>
+<table>
+  <thead><tr><th>Élève</th><th>Code classe</th><th>PIN personnel</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<button class="btn" onclick="window.print()">🖨️ Imprimer</button>
+<p class="note">⚠️ Ces codes sont confidentiels — à distribuer individuellement à chaque élève.</p>
+</body></html>`;
+
+  // Blob URL = pas de popup blocker
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.target = '_blank'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+};
+
 
 // ============================================
 // ADMIN — v9 (roles + plan profs/admins only)
