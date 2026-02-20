@@ -1287,9 +1287,86 @@ function setupModalListeners(tid){
 
   // À binder dans setupModalListeners :
   $("#btnPinManager")?.addEventListener("click", () => openPinManager());
+  $("#btnExportClassCodes")?.addEventListener("click", exportClassCodes);
+
 
 
 }
+
+async function exportClassCodes() {
+  try {
+    const { data: classes, error } = await sb()
+      .from("classes")
+      .select("name, school_year, cycle, class_code")
+      .eq("teacher_id", currentTeacherId)
+      .order("name");
+    if(error) throw error;
+    if(!classes?.length) { toast("Aucune classe", "Crée d'abord une classe.", "error"); return; }
+
+    const cycleLabels = {
+      cycle1:"🌸 Maternelle", cycle2:"🔤 CP/CE1",
+      cycle3:"📚 CE2/CM2",    college:"🏫 Collège"
+    };
+
+    const rows = classes.map(c => `
+      <tr>
+        <td style="padding:14px 16px;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:15px">
+          ${c.name}
+        </td>
+        <td style="padding:14px 16px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px">
+          ${cycleLabels[c.cycle]||c.cycle||'—'} &nbsp;•&nbsp; ${c.school_year||'—'}
+        </td>
+        <td style="padding:14px 16px;border-bottom:1px solid #e5e7eb;text-align:center;
+                   font-family:monospace;font-size:26px;font-weight:900;
+                   letter-spacing:6px;color:#f97316">
+          ${c.class_code || '—'}
+        </td>
+      </tr>`).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<title>Codes classes</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',sans-serif;padding:32px;color:#111}
+  .top{border-bottom:3px solid #f97316;padding-bottom:14px;margin-bottom:24px}
+  h1{font-size:22px;font-weight:800;margin-bottom:6px}
+  .sub{font-size:13px;color:#6b7280}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th{background:#f3f4f6;padding:10px 16px;text-align:left;font-size:11px;
+     text-transform:uppercase;color:#6b7280;letter-spacing:1px}
+  th:last-child{text-align:center}
+  tr:nth-child(even){background:#f9fafb}
+  .btn{margin-top:24px;padding:12px 28px;background:#f97316;color:#fff;
+       border:none;border-radius:10px;font-size:15px;cursor:pointer;font-weight:700}
+  .note{margin-top:12px;font-size:11px;color:#9ca3af;font-style:italic}
+  @media print{.btn,.note{display:none}}
+</style></head><body>
+<div class="top">
+  <h1>🏫 Codes de connexion — Mes classes</h1>
+  <p class="sub">Page de connexion élève : <strong>eleve-pin.html</strong> &nbsp;•&nbsp; ${classes.length} classe(s)</p>
+</div>
+<table>
+  <thead><tr>
+    <th>Classe</th>
+    <th>Niveau / Année</th>
+    <th style="text-align:center">Code classe</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<button class="btn" onclick="window.print()">🖨️ Imprimer</button>
+<p class="note">⚠️ À afficher en classe ou distribuer aux élèves avec leur PIN personnel.</p>
+</body></html>`;
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+  } catch(e) { toast("Erreur", e.message, "error"); }
+}
+
 
 // ============================================
 // GESTION PIN EN MASSE
@@ -1360,6 +1437,9 @@ window.openPinManager = async function() {
             <button onclick="pinGenerateSelected()" class="btn" style="font-size:12px;padding:5px 14px;background:#16a34a">
               🔄 Générer PIN sélectionnés
             </button>
+            <button onclick="pinDisableSelected()" class="btn" style="font-size:12px;padding:5px 14px;background:#ef4444">
+              🚫 Désactiver sélectionnés
+            </button>
             <button onclick="pinExportPrint()" class="btn" style="font-size:12px;padding:5px 14px;background:#1d4ed8">
               🖨️ Exporter / Imprimer
             </button>
@@ -1424,6 +1504,39 @@ window.pinGenerateSelected = async function() {
   toast("✅ PIN générés", `${done} élève(s) mis à jour`, "success");
   await loadElevesList(currentTeacherId);
 };
+
+window.pinDisableSelected = async function() {
+  const selected = Array.from(document.querySelectorAll('.pin-check:checked')).map(cb => cb.dataset.id);
+  if(!selected.length) { toast("Aucun élève sélectionné", "Coche au moins un élève.", "error"); return; }
+
+  // Ne désactive que ceux qui ont un PIN actif
+  const actifs = selected.filter(id => {
+    const s = (window.__pinStudents||[]).find(st => st.id === id);
+    return s?.pin_enabled;
+  });
+  if(!actifs.length) { toast("Info", "Aucun des élèves sélectionnés n'a de PIN actif.", "error"); return; }
+
+  if(!confirm(`Désactiver le PIN de ${actifs.length} élève(s) ? Ils ne pourront plus se connecter.`)) return;
+
+  let done = 0;
+  for(const id of actifs) {
+    try {
+      await sb().from("students").update({ pin_enabled: false }).eq("id", id);
+      // Mise à jour visuelle immédiate
+      const status = document.getElementById(`pinstatus-${id}`);
+      const cell   = document.getElementById(`pincell-${id}`);
+      if(status) status.innerHTML = `<span style="background:#fee2e2;color:#dc2626;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700">❌ Inactif</span>`;
+      if(cell)   cell.textContent = '—';
+      // Met à jour le cache local
+      const s = (window.__pinStudents||[]).find(st => st.id === id);
+      if(s) s.pin_enabled = false;
+      done++;
+    } catch(e) { console.error(e); }
+  }
+  toast("✅ Désactivé", `${done} PIN désactivé(s)`, "success");
+  await loadElevesList(currentTeacherId);
+};
+
 
 window.pinExportPrint = function() {
   const students = (window.__pinStudents || []).filter(s => s.pin_enabled && s.pin_code);
