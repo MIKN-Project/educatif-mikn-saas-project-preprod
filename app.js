@@ -403,7 +403,7 @@ async function loadClasses(tid){
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-secondary" style="font-size:13px"
-          onclick="openEditClass('${cl.id}','${cl.name.replace(/'/g,"\\'")}','${cl.school_year||''}','${cl.cycle||'cycle3'}')">✏️</button>
+          onclick="openEditClass('${cl.id}','${cl.name.replace(/'/g,"\\'")}','${cl.school_year||''}','${cl.cycle||'cycle3'}','${cl.class_code||''}')">✏️</button>
         <button class="btn" style="font-size:13px;background:#ef4444"
           onclick="confirmDeleteClass('${cl.id}','${cl.name.replace(/'/g,"\\'")}')">🗑</button>
       </div>
@@ -411,14 +411,29 @@ async function loadClasses(tid){
   }catch(e){toast("Erreur",e.message,"error");}
 }
 
-window.openEditClass=function(id,name,year,cycle){
-  if($("#modalClassTitle")) $("#modalClassTitle").textContent="Modifier la classe";
-  if($("#classId"))   $("#classId").value=id;
-  if($("#className")) $("#className").value=name;
-  if($("#classYear")) $("#classYear").value=year;
-  if($("#classCycle"))$("#classCycle").value=cycle||"cycle3";
+window.openEditClass = function(id, name, year, cycle, classCode) {
+  if($("#modalClassTitle")) $("#modalClassTitle").textContent = "Modifier la classe";
+  if($("#classId"))          $("#classId").value   = id;
+  if($("#className"))        $("#className").value = name;
+  if($("#classYear"))        $("#classYear").value = year;
+  if($("#classCycle"))       $("#classCycle").value = cycle || "cycle3";
+
+  // Affiche le code classe
+  const grp = $("#classCodeGroup");
+  const inp = $("#classCodeDisplay");
+  if(grp) grp.style.display = classCode ? "block" : "none";
+  if(inp) inp.value = classCode || "";
+
   $("#modalClass").classList.add("show");
 };
+
+window.copyClassCode = function() {
+  const code = $("#classCodeDisplay")?.value || "";
+  if(!code) return;
+  navigator.clipboard.writeText(code)
+    .then(() => toast("Copié !", "Code classe copié 📋", "success"));
+};
+
 
 window.confirmDeleteClass=function(id,name){
   $("#confirmText").textContent=`Supprimer "${name}" ?`;
@@ -472,7 +487,15 @@ async function loadElevesList(tid){
         <div style="font-weight:700;display:flex;align-items:center;gap:6px">
           ${e.first_name} ${e.last_name}
           ${e.pin_enabled
-            ?'<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:999px;font-weight:700">🔑 PIN actif</span>'
+            ?`<span onclick="revealPin('${e.id}','${e.first_name} ${e.last_name}')"
+                style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;
+                      border-radius:999px;font-weight:700;cursor:pointer;
+                      transition:background .15s"
+                title="Cliquer pour voir le PIN"
+                onmouseover="this.style.background='#bfdbfe'"
+                onmouseout="this.style.background='#dbeafe'">
+                🔑 PIN actif 👁
+              </span>`
             :''}
         </div>
         <div style="font-size:13px;color:var(--text-muted)">${e.classes?.name||'Non assigné'}</div>
@@ -491,6 +514,7 @@ window.confirmDeleteEleve=function(id,name){
   $("#confirmText").textContent=`Supprimer "${name}" ?`;
   $("#btnConfirmDelete").onclick=()=>deleteEleve(id); $("#modalConfirm").classList.add("show");
 };
+
 async function deleteEleve(id){
   try{ await sb().from("students").delete().eq("id",id);
     $("#modalConfirm").classList.remove("show"); toast("Supprimé","✅","success");
@@ -514,6 +538,47 @@ async function saveEleve(tid){
   }catch(e){toast("Erreur",e.message,"error");}
 }
 
+window.revealPin = async function(studentId, studentName) {
+  try {
+    const { data, error } = await sb()
+      .from("students")
+      .select("pin_code, classes(class_code)")
+      .eq("id", studentId)
+      .maybeSingle();
+    if(error || !data) { toast("Erreur", "Impossible de charger le PIN", "error"); return; }
+
+    document.getElementById("pinRevealModal")?.remove();
+    const modal = document.createElement("div");
+    modal.className = "modal show"; modal.id = "pinRevealModal";
+    modal.innerHTML = `
+      <div class="modal-content" style="max-width:340px;text-align:center">
+        <div class="modal-header">
+          <h2>🔑 PIN de l'élève</h2>
+          <button class="modal-close" onclick="document.getElementById('pinRevealModal').remove()">✕</button>
+        </div>
+        <div class="modal-body" style="text-align:center;padding:20px">
+          <div style="font-weight:700;font-size:15px;margin-bottom:16px">${studentName}</div>
+          <div style="background:var(--bg-main);border-radius:12px;padding:16px 20px;margin-bottom:14px;border:1px solid var(--border)">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">CODE CLASSE</div>
+            <div style="font-family:monospace;font-size:24px;font-weight:900;color:var(--orange);letter-spacing:4px">
+              ${data.classes?.class_code || "—"}
+            </div>
+          </div>
+          <div style="background:var(--bg-main);border-radius:12px;padding:16px 20px;border:1px solid var(--border)">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">CODE PIN</div>
+            <div style="font-family:monospace;font-size:36px;font-weight:900;letter-spacing:8px;color:#1e40af">
+              ${data.pin_code || "—"}
+            </div>
+          </div>
+          <button class="btn btn-secondary" style="width:100%;margin-top:14px"
+            onclick="navigator.clipboard.writeText('Classe: ${data.classes?.class_code||''} | PIN: ${data.pin_code||''}').then(()=>toast('Copié','✅','success'))">
+            📋 Copier code + PIN
+          </button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  } catch(e) { toast("Erreur", e.message, "error"); }
+};
 
 
 // ============================================
@@ -1165,7 +1230,19 @@ function setupConfirmModal(){
   ["btnCancelConfirm","btnCancelConfirm2"].forEach(id=>$("#"+id)?.addEventListener("click",()=>$("#modalConfirm").classList.remove("show")));
 }
 function setupModalListeners(tid){
-  const openClass=()=>{ if($("#modalClassTitle")) $("#modalClassTitle").textContent="Créer une classe"; if($("#classId")) $("#classId").value=""; if($("#className")) $("#className").value=""; if($("#classYear")) $("#classYear").value="2025-2026"; if($("#classCycle"))$("#classCycle").value="cycle3"; $("#modalClass").classList.add("show"); };
+  const openClass = () => {
+    if($("#modalClassTitle")) $("#modalClassTitle").textContent = "Créer une classe";
+    if($("#classId"))         $("#classId").value   = "";
+    if($("#className"))       $("#className").value = "";
+    if($("#classYear"))       $("#classYear").value = "2025-2026";
+    if($("#classCycle"))      $("#classCycle").value = "cycle3";
+    // ✅ Masquer le code classe (pas encore généré à la création)
+    const grp = $("#classCodeGroup");
+    if(grp) grp.style.display = "none";
+    if($("#classCodeDisplay")) $("#classCodeDisplay").value = "";
+    $("#modalClass").classList.add("show");
+  };
+
   $("#btnAddClass")?.addEventListener("click",openClass);
   $("#btnAddClass2")?.addEventListener("click", openClass);
   ["btnCancelClass","btnCancelClass2"].forEach(id=>$("#"+id)?.addEventListener("click",()=>$("#modalClass").classList.remove("show")));
@@ -1207,6 +1284,85 @@ function setupModalListeners(tid){
   $("#btnAddActivite")?.addEventListener("click",openActivite);
   ["btnCancelActivite","btnCancelActivite2"].forEach(id=>$("#"+id)?.addEventListener("click",()=>$("#modalActivite").classList.remove("show")));
   $("#btnSaveActivite")?.addEventListener("click",()=>saveActivite(tid));
+
+  // À binder dans setupModalListeners :
+  $("#btnExportPins")?.addEventListener("click", exportPinsClasse);
+
+  async function exportPinsClasse() {
+    const classId = $("#filterClass")?.value;
+    if(!classId) {
+      toast("Sélectionne une classe", "Filtre d'abord par classe pour exporter ses PIN.", "error");
+      return;
+    }
+    try {
+      const [{ data: cls }, { data: students }] = await Promise.all([
+        sb().from("classes").select("name, class_code").eq("id", classId).maybeSingle(),
+        sb().from("students")
+          .select("first_name, last_name, pin_code, pin_enabled")
+          .eq("class_id", classId)
+          .eq("pin_enabled", true)
+          .order("last_name")
+      ]);
+
+      if(!students?.length) {
+        toast("Aucun PIN actif", "Active d'abord les PIN des élèves de cette classe.", "error");
+        return;
+      }
+
+      // Génère une page imprimable dans un nouvel onglet
+      const rows = students.map(s => `
+        <tr>
+          <td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;font-weight:600">
+            ${s.first_name} ${s.last_name}
+          </td>
+          <td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;font-family:monospace;
+                    font-size:18px;font-weight:800;letter-spacing:4px;color:#f97316">
+            ${cls?.class_code || "—"}
+          </td>
+          <td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;font-family:monospace;
+                    font-size:22px;font-weight:900;letter-spacing:6px;color:#1e40af">
+            ${s.pin_code || "—"}
+          </td>
+        </tr>`).join("");
+
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+        <title>Codes PIN — ${cls?.name || ""}</title>
+        <style>
+          body { font-family: sans-serif; padding: 30px; }
+          h1   { font-size: 22px; margin-bottom: 4px; }
+          p    { color: #6b7280; font-size: 14px; margin-bottom: 24px; }
+          table { width: 100%; border-collapse: collapse; }
+          th   { text-align:left; padding: 10px 14px; background: #f3f4f6;
+                font-size: 12px; text-transform: uppercase; color: #6b7280; }
+          @media print { button { display:none } }
+        </style></head><body>
+        <h1>🔑 Codes PIN — ${cls?.name || "Classe"}</h1>
+        <p>Code classe : <strong style="font-family:monospace;font-size:16px;
+          letter-spacing:3px;color:#f97316">${cls?.class_code || "—"}</strong>
+          &nbsp;•&nbsp; Page de connexion : <strong>eleve-pin.html</strong>
+        </p>
+        <table>
+          <thead><tr>
+            <th>Élève</th><th>Code classe</th><th>PIN personnel</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <br>
+        <button onclick="window.print()"
+          style="padding:10px 20px;background:#f97316;color:#fff;border:none;
+                border-radius:8px;font-size:14px;cursor:pointer">
+          🖨️ Imprimer
+        </button>
+      </body></html>`;
+
+      const w = window.open("", "_blank");
+      w.document.write(html);
+      w.document.close();
+
+    } catch(e) { toast("Erreur", e.message, "error"); }
+  }
+
+
 }
 
 // ============================================
