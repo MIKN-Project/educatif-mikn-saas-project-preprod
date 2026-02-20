@@ -258,8 +258,23 @@
       <div class="modal-header"><h2 id="modalClassTitle">Créer une classe</h2><button class="modal-close" id="btnCancelClass">✕</button></div>
       <div class="modal-body">
         <input type="hidden" id="classId">
-        <div class="form-group"><label>Nom de la classe *</label><input type="text" id="className" class="input" placeholder="Ex : CM2 A"></div>
-        <div class="form-group"><label>Année scolaire</label><input type="text" id="classYear" class="input" value="2025-2026"></div>
+        <div class="form-group">
+          <label>Nom de la classe *</label>
+          <input type="text" id="className" class="input" placeholder="Ex : CM2 A">
+        </div>
+        <div class="form-group">
+          <label>Année scolaire</label>
+          <input type="text" id="classYear" class="input" value="2025-2026">
+        </div>
+        <div class="form-group">
+          <label>Niveau / Cycle</label>
+          <select id="classCycle" class="input">
+            <option value="cycle1">🌸 Cycle 1 — Maternelle</option>
+            <option value="cycle2">🔤 Cycle 2 — CP / CE1</option>
+            <option value="cycle3" selected>📚 Cycle 3 — CE2 / CM1 / CM2</option>
+            <option value="college">🏫 Collège — 6e / 5e / 4e / 3e</option>
+          </select>
+        </div>
       </div>
       <div class="modal-footer"><button class="btn btn-secondary" id="btnCancelClass2">Annuler</button><button class="btn" id="btnSaveClass">Enregistrer</button></div>
     </div>
@@ -389,6 +404,7 @@
         </div>
 
         <!-- INFOS -->
+        <!-- INFOS -->
         <div id="ftab-infos" class="ftab" style="display:none">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
             <div class="form-group"><label>Prénom</label><input type="text" id="infoFirstName" class="input"></div>
@@ -396,7 +412,46 @@
             <div class="form-group"><label>Classe</label><select id="infoClassId" class="input"><option value="">Aucune</option></select></div>
             <div class="form-group"><label>Email parent</label><input type="text" id="infoParentEmail" class="input" placeholder="email parent…"></div>
           </div>
-          <button class="btn" onclick="saveEleveInfos()">💾 Enregistrer les modifications</button>
+
+          <!-- Bloc PIN ← NOUVEAU -->
+          <div style="margin-top:16px;background:var(--bg-main);border-radius:12px;padding:16px;border:1px solid var(--border)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+              <div>
+                <div style="font-weight:700;font-size:14px">🔑 Accès PIN élève</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+                  Permet à l'élève de se connecter avec un code simple (cycles 2 & 3 — optionnel)
+                </div>
+              </div>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="checkbox" id="infoPinEnabled"
+                  onchange="togglePinDisplay(this.checked)"
+                  style="accent-color:var(--orange);width:18px;height:18px">
+                <span style="font-size:13px;font-weight:600">Activer</span>
+              </label>
+            </div>
+            <div id="pinSection" style="display:none">
+              <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+                <div class="form-group" style="margin:0;flex:1;min-width:120px">
+                  <label>Code PIN de l'élève</label>
+                  <input type="text" id="infoPinCode" class="input" maxlength="6"
+                    placeholder="4 chiffres" oninput="refreshPinPreview()"
+                    style="font-size:22px;letter-spacing:6px;text-align:center;font-weight:700">
+                </div>
+                <button type="button" class="btn btn-secondary" onclick="regenPin()">🔄 Régénérer</button>
+                <button type="button" class="btn btn-secondary" onclick="copyPin()">📋 Copier</button>
+              </div>
+              <div style="margin-top:12px;background:#dbeafe;border-radius:8px;padding:12px 14px;font-size:12px;color:#1e40af;line-height:1.8">
+                <strong>À communiquer à l'élève :</strong><br>
+                🌐 Page : <strong>eleve-pin.html</strong><br>
+                🏫 Code classe : <strong id="displayClassCode">—</strong><br>
+                🔑 PIN : <strong id="displayPin">—</strong>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn" onclick="saveEleveInfos()" style="margin-top:16px">
+            💾 Enregistrer les modifications
+          </button>
         </div>
       </div>
     </div>
